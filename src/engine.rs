@@ -2,6 +2,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 
+use crate::share::Host;
+
 use image::RgbaImage;
 
 use crate::devices::{self, DeviceSet};
@@ -43,18 +45,21 @@ impl Model {
         let _ = fs::create_dir_all(settings.output_dir_path());
         let mut library = library::Library::load(&paths.library_file);
         library.reconcile(&settings.output_dir_path());
-        let _ = library.save(&paths.library_file);
-        Self { paths, settings, library, session: None, pending: None }
+        let model = Self { paths, settings, library, session: None, pending: None };
+        ensure_thumbs(&model);
+        let _ = model.library.save(&model.paths.library_file);
+        model
     }
 }
 
 pub struct Engine {
     model: Mutex<Model>,
+    host: Mutex<Option<Host>>,
 }
 
 impl Engine {
     pub fn new() -> Self {
-        Self { model: Mutex::new(Model::boot()) }
+        Self { model: Mutex::new(Model::boot()), host: Mutex::new(None) }
     }
 
     fn lock(&self) -> MutexGuard<'_, Model> {
@@ -267,6 +272,46 @@ impl Engine {
         if self.lock().session.is_some() { self.stop() } else { self.start_screen(None) }
     }
 
+    pub fn send_capture(&self, id: &str) -> Cmd<String> {
+        let model = self.lock();
+        let locale = model.settings.locale.clone();
+        let record = model.library.get(id).ok_or_else(|| fail(&locale, "UNKNOWN"))?.clone();
+        let settings = model.settings.clone();
+        drop(model);
+        let base = if settings.share_direct { &settings.peer_url } else { &settings.server_url };
+        match crate::share::upload(base, &settings.share_token, Path::new(&record.path)) {
+            Ok(url) => {
+                let _ = copy_link(&url);
+                Ok(url)
+            }
+            Err(err) if err == "missing" => Err(fail(&locale, "SHARE_MISSING")),
+            Err(err) if err == "denied" => Err(fail(&locale, "SHARE_DENIED")),
+            Err(err) => Err(CommandError::new("SHARE_FAILED", format!("{} {err}", crate::copy::text(&locale, "SHARE_FAILED")))),
+        }
+    }
+
+    pub fn toggle_host(&self) -> Cmd<(bool, String)> {
+        let mut slot = self.host.lock().unwrap_or_else(|err| err.into_inner());
+        let locale = self.locale();
+        if slot.is_some() {
+            *slot = None;
+            return Ok((false, crate::copy::text(&locale, "SHARE_HOST_OFF")));
+        }
+        let token = self.lock().settings.share_token.clone();
+        if token.trim().is_empty() {
+            return Err(fail(&locale, "SHARE_MISSING"));
+        }
+        let dir = self.lock().paths.config_dir.join("inbox");
+        match Host::start("0.0.0.0:8741", &token, &dir) {
+            Ok(host) => {
+                let url = host.url.clone();
+                *slot = Some(host);
+                Ok((true, url))
+            }
+            Err(err) => Err(CommandError::new("SHARE_FAILED", format!("{} {err}", crate::copy::text(&locale, "SHARE_FAILED")))),
+        }
+    }
+
     pub fn open_film(&self, path: &str) -> Cmd<()> {
         let locale = self.locale();
         for (program, extra) in [("mpv", &[][..]), ("vlc", &[]), ("totem", &[]), ("ffplay", &["-autoexit"][..])] {
@@ -461,6 +506,26 @@ fn finish_record(model: &Model, finished: &session::Finished) -> CaptureRecord {
         duration_ms: Some(finished.duration_ms),
         bytes: finished.bytes,
         source: finished.source.clone(),
+    }
+}
+
+fn copy_link(url: &str) -> bool {
+    arboard::Clipboard::new().and_then(|mut clipboard| clipboard.set_text(url)).is_ok()
+}
+
+fn ensure_thumbs(model: &Model) {
+    for record in model.library.items() {
+        let thumb = library::thumb_path(&model.paths.thumbs_dir, &record.id);
+        if thumb.is_file() {
+            continue;
+        }
+        if record.kind == "recording" {
+            if let Some(bin) = encode::find_tool("ffmpeg") {
+                let _ = media::video_thumb(&bin, Path::new(&record.path), &thumb);
+            }
+        } else if let Ok(image) = image::open(&record.path) {
+            let _ = media::write_thumb(&image.to_rgba8(), &thumb);
+        }
     }
 }
 

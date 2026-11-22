@@ -22,8 +22,9 @@ Le moteur est séparé de l'interface : `xcap` parle aux API natives (X11, porta
 - Film de l'écran, d'une fenêtre ou d'une zone. Pause, reprise, stop. MP4 local. Micro, son du système et bulle caméra quand le matériel existe.
 - Icône native dans la barre de statut.
 - Raccourcis globaux.
-- Bibliothèque : une photo s'ouvre dans Kapture. Le dossier et la suppression restent là. Un film s'ouvre dans un lecteur vidéo, pas dans le navigateur.
-- Réglages : dossier, hauteur jusqu'à la 4K sans agrandir, cadence, qualité, curseur, micro, son, bulle.
+- Bibliothèque : mosaïque avec les vignettes, ou liste avec l'aperçu au survol. Une photo s'ouvre dans Kapture. Un film s'ouvre dans un lecteur vidéo.
+- Envoi direct vers une autre machine Kapture, ou vers un serveur que l'on héberge soi-même.
+- Réglages : dossier, hauteur jusqu'à la 4K sans agrandir, cadence, qualité, curseur, micro, son, bulle, adresse et jeton de partage.
 - Français par défaut, anglais au bouton de langue.
 
 ## Plus tard
@@ -31,10 +32,21 @@ Le moteur est séparé de l'interface : `xcap` parle aux API natives (X11, porta
 - Annotation : flèches, texte, floutage.
 - Recadrage et édition rapide.
 - Export JPEG et WebP, en plus du PNG.
-- Partage des captures.
 - Montage : couper, zoomer sur les clics.
 
 Les fichiers restent sur le disque. `library.json` décrit leur source pour ces étapes.
+
+## Partage
+
+Le serveur héberge la capture et renvoie un lien. La personne peut l'ouvrir plus tard, sans être connectée au moment de l'envoi.
+
+```bash
+kapture serve --bind 0.0.0.0:8741 --token un-jeton-long
+```
+
+Dans Réglages, mode **Serveur**, adresse `http://votre-machine:8741`, même jeton. **Envoyer** dans la bibliothèque dépose le fichier et copie le lien. La page d'accueil du serveur liste les captures.
+
+Le mode **Direct** envoie vers un autre Kapture allumé à ce moment-là. Si ce Kapture est éteint, l'envoi échoue : c'est pour ça que le lien passe par le serveur.
 
 ## Lancer
 

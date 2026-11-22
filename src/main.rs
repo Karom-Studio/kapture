@@ -14,9 +14,14 @@ mod report;
 mod screen;
 mod session;
 mod settings;
+mod share;
 mod ui;
 mod veil;
 
 fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("serve") {
+        std::process::exit(share::serve_cli(&args[1..]));
+    }
     ui::run();
 }

@@ -142,6 +142,10 @@ pub struct Settings {
     pub webcam_enabled: bool,
     pub webcam_size: WebcamSize,
     pub webcam_position: Corner,
+    pub share_direct: bool,
+    pub peer_url: String,
+    pub server_url: String,
+    pub share_token: String,
     pub hotkeys: Hotkeys,
 }
 
@@ -159,6 +163,10 @@ impl Default for Settings {
             webcam_enabled: false,
             webcam_size: WebcamSize::Medium,
             webcam_position: Corner::BottomRight,
+            share_direct: false,
+            peer_url: String::new(),
+            server_url: String::new(),
+            share_token: String::new(),
             hotkeys: Hotkeys::default(),
         }
     }

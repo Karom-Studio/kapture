@@ -44,6 +44,15 @@ pub fn text(locale: &str, code: &str) -> String {
         "NO_SYSTEM_AUDIO" => if en { "No system-audio source found." } else { "Aucune source pour le son du système." },
         "NO_CAMERA" => if en { "No camera found. The film will not have a bubble." } else { "Aucune caméra trouvée. Le film n'aura pas de bulle." },
         "DELETED" => if en { "Deleted." } else { "Supprimé." },
+        "SHARE_MISSING" => if en {
+            "Set the address and the token in Settings."
+        } else {
+            "Indiquez l'adresse et le jeton dans Réglages."
+        },
+        "SHARE_DENIED" => if en { "The token was refused." } else { "Le jeton a été refusé." },
+        "SHARE_FAILED" => if en { "The capture could not be sent." } else { "La capture n'a pas pu être envoyée." },
+        "SHARE_HOST_OFF" => if en { "Kapture is no longer receiving." } else { "Kapture ne reçoit plus." },
+        "SHARE_LINK" => if en { "Link copied." } else { "Lien copié." },
         "NO_PLAYER" => if en {
             "No video player found. The film stays in the library."
         } else {

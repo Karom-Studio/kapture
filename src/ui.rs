@@ -9,9 +9,10 @@ use global_hotkey::HotKeyState;
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager};
 use gpui::{
     img, px, rgb, size, App, Bounds, Context, ImageSource, IntoElement, MouseButton,
-    MouseDownEvent, MouseMoveEvent, Pixels, Point, Render, RenderImage, SharedString, Window,
+    FocusHandle, KeyDownEvent, MouseDownEvent, MouseMoveEvent, Pixels, Point, Render, RenderImage, SharedString, Window,
     WindowBounds, WindowOptions, div, prelude::*,
 };
+use base64::Engine as _;
 use image::RgbaImage;
 use smallvec::smallvec;
 
@@ -70,6 +71,14 @@ struct Kapture {
     preview_w: u32,
     preview_h: u32,
     viewer_name: String,
+    mosaic: bool,
+    hovered: Option<String>,
+    thumbs: HashMap<String, Arc<RenderImage>>,
+    peer_focus: FocusHandle,
+    server_focus: FocusHandle,
+    token_focus: FocusHandle,
+    hosting: bool,
+    host_label: String,
     drag: Option<(Point<Pixels>, Point<Pixels>)>,
     picker: Option<(String, Vec<crate::dto::WindowDto>)>,
     manager: Option<GlobalHotKeyManager>,
@@ -96,6 +105,14 @@ impl Kapture {
             preview_w: 0,
             preview_h: 0,
             viewer_name: String::new(),
+            mosaic: true,
+            hovered: None,
+            thumbs: HashMap::new(),
+            peer_focus: cx.focus_handle(),
+            server_focus: cx.focus_handle(),
+            token_focus: cx.focus_handle(),
+            hosting: false,
+            host_label: String::new(),
             drag: None,
             picker: None,
             manager: GlobalHotKeyManager::new().ok(),
@@ -608,17 +625,149 @@ impl Kapture {
             .child(SharedString::from(format!("{label} · {state_label}")))
     }
 
+    fn cache_thumbs(&mut self) {
+        for item in &self.boot.library {
+            let id = &item.record.id;
+            if self.thumbs.contains_key(id) {
+                continue;
+            }
+            let Some(encoded) = item.thumbnail_base64.as_deref() else { continue };
+            let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(encoded) else { continue };
+            let Ok(image) = image::load_from_memory(&bytes) else { continue };
+            self.thumbs.insert(id.clone(), rgba_image(&image.to_rgba8()));
+        }
+    }
+
     fn library(&self, t: &Texts, cx: &mut Context<Self>) -> gpui::Div {
-        let mut column = div().flex().flex_col().gap(px(12.)).child(
-            div().text_size(px(28.)).child(SharedString::from(t.library)),
-        );
+        let header = div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .child(div().text_size(px(28.)).child(SharedString::from(t.library)))
+            .child(
+                div()
+                    .flex()
+                    .gap(px(8.))
+                    .child(action_button(t.list, !self.mosaic).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                        this.mosaic = false;
+                        this.hovered = None;
+                        cx.notify();
+                    })))
+                    .child(action_button(t.mosaic, self.mosaic).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                        this.mosaic = true;
+                        this.hovered = None;
+                        cx.notify();
+                    }))),
+            );
+        let mut column = div().flex().flex_col().gap(px(16.)).child(header);
         if self.boot.library.is_empty() {
             return column.child(div().text_color(rgb(0x8a847c)).child(SharedString::from(t.empty)));
         }
-        for item in &self.boot.library {
-            column = column.child(self.library_row(item, t, cx));
+        if self.mosaic {
+            let mut grid = div().flex().flex_wrap().gap(px(12.));
+            for item in &self.boot.library {
+                grid = grid.child(self.library_tile(item, t, cx));
+            }
+            column.child(grid)
+        } else {
+            for item in &self.boot.library {
+                column = column.child(self.library_row(item, t, cx));
+            }
+            column
         }
-        column
+    }
+
+    fn thumb(&self, id: &str) -> Option<Arc<RenderImage>> {
+        self.thumbs.get(id).cloned()
+    }
+
+    fn open_library_item(&mut self, path: String, filename: String, film: bool, cx: &mut Context<Self>) {
+        if film {
+            if let Err(err) = self.engine.open_film(&path) {
+                self.notice = Some(notice_from(err));
+            }
+            cx.notify();
+            return;
+        }
+        self.mode = Mode::Preparing;
+        let tx = self.tx.clone();
+        thread::spawn(move || {
+            let loaded = image::open(&path).map(|img| (filename, img.to_rgba8())).map_err(|err| err.to_string());
+            let _ = tx.send(Job::View(loaded));
+        });
+        cx.notify();
+    }
+
+    fn send_library_item(&mut self, id: &str, cx: &mut Context<Self>) {
+        match self.engine.send_capture(id) {
+            Ok(url) => {
+                let lead = crate::copy::text(&self.boot.settings.locale, "SHARE_LINK");
+                self.notice = Some(Notice { level: "info".into(), code: "SHARE".into(), message: format!("{lead} {url}") });
+            }
+            Err(err) => self.notice = Some(notice_from(err)),
+        }
+        cx.notify();
+    }
+
+    fn library_tile(&self, item: &CaptureDto, t: &Texts, cx: &mut Context<Self>) -> impl IntoElement {
+        let path = item.record.path.clone();
+        let filename = item.record.filename.clone();
+        let film = item.record.kind == "recording";
+        let label = if film { t.film } else { t.photo };
+        let name = item.record.filename.clone();
+        div()
+            .w(px(280.))
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .p(px(8.))
+            .bg(rgb(0xffffff))
+            .border_1()
+            .border_color(rgb(0xe6e1da))
+            .rounded(px(16.))
+            .child(thumb_box(self.thumb(&item.record.id), px(264.), px(148.)).on_mouse_up(
+                MouseButton::Left,
+                cx.listener(move |this, _, _, cx| this.open_library_item(path.clone(), filename.clone(), film, cx)),
+            ))
+            .child(div().text_size(px(12.)).text_color(rgb(0x6f6a64)).child(SharedString::from(format!("{label} · {name}"))))
+            .child(
+                div()
+                    .flex()
+                    .gap(px(6.))
+                    .child(small_button(t.open).on_mouse_up(MouseButton::Left, cx.listener({
+                        let path = item.record.path.clone();
+                        let filename = item.record.filename.clone();
+                        let film = item.record.kind == "recording";
+                        move |this, _, _, cx| this.open_library_item(path.clone(), filename.clone(), film, cx)
+                    })))
+                    .child(small_button(t.send).on_mouse_up(MouseButton::Left, cx.listener({
+                        let id = item.record.id.clone();
+                        move |this, _, _, cx| this.send_library_item(&id, cx)
+                    })))
+                    .child(small_button(t.reveal).on_mouse_up(MouseButton::Left, cx.listener({
+                        let id = item.record.id.clone();
+                        move |this, _, _, cx| {
+                            if let Err(err) = this.engine.reveal_capture(&id) {
+                                this.notice = Some(notice_from(err));
+                            }
+                            cx.notify();
+                        }
+                    })))
+                    .child(small_button(t.delete).on_mouse_up(MouseButton::Left, cx.listener({
+                        let id = item.record.id.clone();
+                        move |this, _, _, cx| {
+                            match this.engine.delete_capture(&id) {
+                                Ok(removed) => {
+                                    this.boot.library.retain(|row| row.record.id != removed);
+                                    this.thumbs.remove(&removed);
+                                    this.notice = Some(note(&this.boot.settings.locale, "info", "DELETED"));
+                                }
+                                Err(err) => this.notice = Some(notice_from(err)),
+                            }
+                            cx.notify();
+                        }
+                    }))),
+            )
     }
 
     fn library_row(&self, item: &CaptureDto, t: &Texts, cx: &mut Context<Self>) -> impl IntoElement {
@@ -628,7 +777,10 @@ impl Kapture {
             "{kind} · {}×{} · {}",
             item.record.width, item.record.height, item.record.filename
         );
+        let hovered = self.hovered.as_deref() == Some(item.record.id.as_str());
+        let thumb = self.thumb(&item.record.id);
         div()
+            .id(SharedString::from(format!("row-{}", item.record.id)))
             .flex()
             .items_center()
             .gap(px(12.))
@@ -637,31 +789,30 @@ impl Kapture {
             .border_1()
             .border_color(rgb(0xe6e1da))
             .rounded(px(14.))
+            .on_hover(cx.listener({
+                let id = item.record.id.clone();
+                move |this, inside: &bool, _, cx| {
+                    if *inside {
+                        this.hovered = Some(id.clone());
+                    } else if this.hovered.as_deref() == Some(id.as_str()) {
+                        this.hovered = None;
+                    }
+                    cx.notify();
+                }
+            }))
+            .when(hovered, |row| {
+                row.child(thumb_box(thumb.clone(), px(200.), px(112.)))
+            })
             .child(div().flex_1().child(SharedString::from(meta)))
             .child(small_button(t.open).on_mouse_up(MouseButton::Left, cx.listener({
                 let path = item.record.path.clone();
                 let filename = item.record.filename.clone();
                 let film = item.record.kind == "recording";
-                move |this, _, _, cx| {
-                    if film {
-                        if let Err(err) = this.engine.open_film(&path) {
-                            this.notice = Some(notice_from(err));
-                        }
-                        cx.notify();
-                        return;
-                    }
-                    this.mode = Mode::Preparing;
-                    let tx = this.tx.clone();
-                    let path = path.clone();
-                    let filename = filename.clone();
-                    thread::spawn(move || {
-                        let loaded = image::open(&path)
-                            .map(|img| (filename, img.to_rgba8()))
-                            .map_err(|err| err.to_string());
-                        let _ = tx.send(Job::View(loaded));
-                    });
-                    cx.notify();
-                }
+                move |this, _, _, cx| this.open_library_item(path.clone(), filename.clone(), film, cx)
+            })))
+            .child(small_button(t.send).on_mouse_up(MouseButton::Left, cx.listener({
+                let id = id.clone();
+                move |this, _, _, cx| this.send_library_item(&id, cx)
             })))
             .child(small_button(t.reveal).on_mouse_up(MouseButton::Left, cx.listener({
                 let id = id.clone();
@@ -756,12 +907,85 @@ impl Kapture {
                 this.boot.settings.webcam_position = [Corner::TopLeft, Corner::TopRight, Corner::BottomLeft, Corner::BottomRight][index];
             }))
             .child(div().text_color(rgb(0x8a847c)).child(SharedString::from(shortcut_line(&s.hotkeys))))
+            .child(div().mt(px(8.)).text_size(px(18.)).child(SharedString::from(t.share)))
+            .child(self.choice_row(t.share, &[
+                (t.direct, s.share_direct),
+                (t.server, !s.share_direct),
+            ], cx, |this, index| {
+                this.boot.settings.share_direct = index == 0;
+            }))
+            .child(div().text_size(px(13.)).text_color(rgb(0x6f6a64)).child(SharedString::from(
+                if s.share_direct { t.direct_hint } else { t.server_hint },
+            )))
+            .child(self.share_box(t.peer, &s.peer_url, &self.peer_focus, 0, cx))
+            .child(self.share_box(t.server, &s.server_url, &self.server_focus, 1, cx))
+            .child(self.share_box(t.token, &s.share_token, &self.token_focus, 2, cx))
+            .child(action_button(if self.hosting { t.host_stop } else { t.host_start }, self.hosting).on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|this, _, _, cx| {
+                    match this.engine.toggle_host() {
+                        Ok((on, message)) => {
+                            this.hosting = on;
+                            this.host_label = message.clone();
+                            this.notice = Some(Notice { level: "info".into(), code: "SHARE".into(), message });
+                        }
+                        Err(err) => this.notice = Some(notice_from(err)),
+                    }
+                    cx.notify();
+                }),
+            ))
+            .child(div().text_color(rgb(0x8a847c)).child(SharedString::from(self.host_label.clone())))
             .child(div().mt(px(8.)).text_size(px(18.)).child(SharedString::from(t.later)))
             .child(div().text_color(rgb(0x8a847c)).child(SharedString::from(t.later_body)))
             .child(action_button(t.lang, false).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
                 this.boot.settings.locale = if this.boot.settings.locale == "en" { "fr".into() } else { "en".into() };
                 this.persist_settings(cx);
             })))
+    }
+
+    fn share_box(
+        &self,
+        label: &'static str,
+        value: &str,
+        handle: &FocusHandle,
+        field: u8,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let shown = if value.is_empty() { "…".to_string() } else { value.to_string() };
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(4.))
+            .child(div().text_size(px(12.)).text_color(rgb(0x8a847c)).child(SharedString::from(label)))
+            .child(
+                div()
+                    .id(SharedString::from(format!("share-field-{field}")))
+                    .px(px(12.))
+                    .py(px(8.))
+                    .rounded(px(10.))
+                    .bg(rgb(0xffffff))
+                    .border_1()
+                    .border_color(rgb(0xd9d3cb))
+                    .track_focus(handle)
+                    .on_mouse_up(MouseButton::Left, cx.listener({
+                        let handle = handle.clone();
+                        move |_, _, window, cx| {
+                            window.focus(&handle);
+                            cx.notify();
+                        }
+                    }))
+                    .on_key_down(cx.listener(move |this, ev: &KeyDownEvent, _, cx| {
+                        let slot = match field {
+                            0 => &mut this.boot.settings.peer_url,
+                            1 => &mut this.boot.settings.server_url,
+                            _ => &mut this.boot.settings.share_token,
+                        };
+                        if edit_text(slot, ev) {
+                            this.persist_settings(cx);
+                        }
+                    }))
+                    .child(SharedString::from(shown)),
+            )
     }
 
     fn choice_row(
@@ -908,6 +1132,7 @@ impl Kapture {
 
 impl Render for Kapture {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.cache_thumbs();
         match self.mode {
             Mode::Preparing => div()
                 .size_full()
@@ -941,6 +1166,36 @@ fn nav_button(
         .cursor_pointer()
         .child(SharedString::from(label))
         .on_mouse_up(MouseButton::Left, cx.listener(move |this, _, _, cx| f(this, cx)))
+}
+
+fn edit_text(value: &mut String, ev: &KeyDownEvent) -> bool {
+    if ev.keystroke.modifiers.control || ev.keystroke.modifiers.platform || ev.keystroke.modifiers.alt {
+        return false;
+    }
+    if ev.keystroke.key == "backspace" {
+        value.pop();
+        return true;
+    }
+    if let Some(text) = ev.keystroke.key_char.as_deref() {
+        if text.chars().all(|ch| !ch.is_control()) && !text.is_empty() {
+            value.push_str(text);
+            return true;
+        }
+    }
+    false
+}
+
+fn thumb_box(image: Option<Arc<RenderImage>>, width: gpui::Pixels, height: gpui::Pixels) -> gpui::Div {
+    let mut box_ = div()
+        .w(width)
+        .h(height)
+        .rounded(px(10.))
+        .bg(rgb(0xf3f1ed))
+        .overflow_hidden();
+    if let Some(image) = image {
+        box_ = box_.child(img(ImageSource::Render(image)).size_full().object_fit(gpui::ObjectFit::Cover));
+    }
+    box_
 }
 
 fn action_button(label: &'static str, filled: bool) -> gpui::Div {
@@ -1026,6 +1281,18 @@ struct Texts {
     home_title: &'static str,
     home: &'static str,
     library: &'static str,
+    list: &'static str,
+    mosaic: &'static str,
+    share: &'static str,
+    direct: &'static str,
+    server: &'static str,
+    peer: &'static str,
+    token: &'static str,
+    send: &'static str,
+    host_start: &'static str,
+    host_stop: &'static str,
+    direct_hint: &'static str,
+    server_hint: &'static str,
     settings: &'static str,
     screen: &'static str,
     window: &'static str,
@@ -1094,6 +1361,18 @@ fn texts(locale: &str) -> Texts {
             home_title: "What do you want to keep?",
             home: "Home",
             library: "Library",
+            list: "List",
+            mosaic: "Grid",
+            share: "Send",
+            direct: "Direct",
+            server: "Server",
+            peer: "Peer address",
+            token: "Token",
+            send: "Send",
+            host_start: "Receive here",
+            host_stop: "Stop receiving",
+            direct_hint: "The other Kapture has to be on.",
+            server_hint: "The link stays online. The other person does not need to be connected.",
             settings: "Settings",
             screen: "Whole screen",
             window: "One window",
@@ -1160,6 +1439,18 @@ fn texts(locale: &str) -> Texts {
             home_title: "Que voulez-vous garder ?",
             home: "Accueil",
             library: "Bibliothèque",
+            list: "Liste",
+            mosaic: "Mosaïque",
+            share: "Envoi",
+            direct: "Direct",
+            server: "Serveur",
+            peer: "Adresse du pair",
+            token: "Jeton",
+            send: "Envoyer",
+            host_start: "Recevoir ici",
+            host_stop: "Arrêter",
+            direct_hint: "L'autre Kapture doit être allumé.",
+            server_hint: "Le lien reste en ligne. La personne n'a pas besoin d'être connectée.",
             settings: "Réglages",
             screen: "Écran entier",
             window: "Une fenêtre",
