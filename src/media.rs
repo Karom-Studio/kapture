@@ -93,6 +93,34 @@ pub fn trim_copy(ffmpeg: &Path, input: &Path, output: &Path, start_ms: u64, end_
     }
 }
 
+pub fn grab_frame(ffmpeg: &Path, input: &Path, at_ms: u64) -> Result<RgbaImage, String> {
+    let at = format!("{:.3}", at_ms as f64 / 1000.0);
+    let output = std::env::temp_dir().join(format!(
+        "kapture-frame-{}-{}.png",
+        std::process::id(),
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0)
+    ));
+    let status = Command::new(ffmpeg)
+        .args(["-y", "-i"])
+        .arg(input)
+        .args(["-ss", &at, "-frames:v", "1"])
+        .arg(&output)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|e| e.to_string())?;
+    if !status.success() || !output.is_file() {
+        let _ = std::fs::remove_file(&output);
+        return Err("frame".into());
+    }
+    let image = image::open(&output).map_err(|e| e.to_string())?.to_rgba8();
+    let _ = std::fs::remove_file(&output);
+    if image.width() == 0 || image.height() == 0 {
+        return Err("frame".into());
+    }
+    Ok(image)
+}
+
 pub fn video_thumb(ffmpeg: &Path, video: &Path, thumb: &Path) -> bool {
     if let Some(parent) = thumb.parent() {
         let _ = std::fs::create_dir_all(parent);
@@ -180,6 +208,35 @@ mod tests {
         }
         trim_copy(&ffmpeg, &source, &output, 0, 800, "Kapture").unwrap();
         assert!(output.metadata().unwrap().len() > 400);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn grab_frame_reads_the_color_at_that_moment() {
+        let Some(ffmpeg) = crate::encode::find_tool("ffmpeg") else { return };
+        let dir = std::env::temp_dir().join(format!("kapture-frame-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let source = dir.join("in.mp4");
+        let made = Command::new(&ffmpeg)
+            .args([
+                "-y", "-f", "lavfi", "-i",
+                "color=c=red:s=160x90:d=1",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            ])
+            .arg(&source)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false);
+        if !made {
+            let _ = std::fs::remove_dir_all(&dir);
+            return;
+        }
+        let image = grab_frame(&ffmpeg, &source, 400).unwrap();
+        assert_eq!((image.width(), image.height()), (160, 90));
+        assert!(image.get_pixel(20, 20).0[0] > 180);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

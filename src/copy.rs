@@ -54,6 +54,8 @@ pub fn text(locale: &str, code: &str) -> String {
         "SHARE_HOST_OFF" => if en { "Kapture is no longer receiving." } else { "Kapture ne reçoit plus." },
         "SHARE_LINK" => if en { "Link copied." } else { "Lien copié." },
         "EDIT_SAVED" => if en { "Edit saved." } else { "Modification enregistrée." },
+        "FRAME_SAVED" => if en { "Still saved from the film." } else { "Photo prise sur le film." },
+        "FRAME_FAILED" => if en { "That moment could not be read." } else { "Cet instant n'a pas pu être lu." },
         "TRIM_RANGE" => if en { "That cut is too short." } else { "Cette coupe est trop courte." },
         "TRIM_FAILED" => if en { "The film could not be cut." } else { "Le film n'a pas pu être coupé." },
         "ANNOTATE_FONT" => if en { "No font was found to write on the film." } else { "Aucune police pour écrire sur le film." },

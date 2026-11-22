@@ -19,7 +19,7 @@ Le moteur est séparé de l'interface : `xcap` parle aux API natives (X11, porta
 ## Cette version
 
 - Photo de l'écran, d'une fenêtre ou d'une zone. La fenêtre de Kapture est masquée le temps de la prise. PNG, presse-papiers et dossier. Éditer ajoute un trait, une flèche, un cadre, une coche, une croix, une étoile, du texte, ou un recadrage.
-- Film de l'écran, d'une fenêtre ou d'une zone. Pause, reprise, stop. MP4 local. Éditer coupe le début et la fin, et peut incruster une ligne de texte. Micro et son du système quand le matériel existe. La webcam en incrustation se choisit avant l'enregistrement : sans, ou petite, moyenne et grande, dans un coin.
+- Film de l'écran, d'une fenêtre ou d'une zone. Pause, reprise, stop. MP4 local. Éditer coupe le début et la fin, incruste une ligne de texte, et prend une photo de l'instant choisi. Micro et son du système quand le matériel existe. La webcam en incrustation se choisit avant l'enregistrement : sans, ou petite, moyenne et grande, dans un coin.
 - Icône native dans la barre de statut.
 - Raccourcis globaux.
 - Bibliothèque : mosaïque avec les vignettes, ou liste avec l'aperçu au survol. Une photo s'ouvre dans Kapture. Un film s'ouvre dans un lecteur vidéo.

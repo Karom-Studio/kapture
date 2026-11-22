@@ -36,6 +36,8 @@ enum Job {
     Command(HotAct),
     View(Result<(String, RgbaImage), String>),
     EditFilm { path: String, name: String, duration_ms: u64 },
+    FilmFrame { ticket: u64, image: Result<RgbaImage, String> },
+    FrameSaved(Result<ActionResult, String>),
 }
 
 pub fn run() {
@@ -86,6 +88,9 @@ struct Kapture {
     film_start: u64,
     film_end: u64,
     film_duration: u64,
+    film_at: u64,
+    frame_ticket: u64,
+    frame_image: Option<RgbaImage>,
     marks: Vec<crate::annotate::Mark>,
     tool: u8,
     inking: bool,
@@ -132,6 +137,9 @@ impl Kapture {
             film_start: 0,
             film_end: 0,
             film_duration: 0,
+            film_at: 0,
+            frame_ticket: 0,
+            frame_image: None,
             marks: Vec::new(),
             tool: 0,
             inking: false,
@@ -224,10 +232,37 @@ impl Kapture {
                     self.film_duration = duration_ms;
                     self.film_start = 0;
                     self.film_end = duration_ms;
+                    self.film_at = 0;
                     self.draft.clear();
+                    self.frame_image = None;
+                    self.preview = None;
                     self.mode = Mode::EditFilm;
                     self.page = Page::Library;
+                    self.request_frame();
                 }
+                Job::FilmFrame { ticket, image } => {
+                    if ticket == self.frame_ticket && self.mode == Mode::EditFilm {
+                        match image {
+                            Ok(image) => {
+                                self.preview_w = image.width();
+                                self.preview_h = image.height();
+                                self.preview = Some(rgba_image(&image));
+                                self.frame_image = Some(image);
+                            }
+                            Err(message) => self.fail_text(message),
+                        }
+                    }
+                }
+                Job::FrameSaved(result) => match result {
+                    Ok(result) => {
+                        if let Some(item) = result.item {
+                            self.boot.library.retain(|row| row.record.id != item.record.id);
+                            self.boot.library.insert(0, item);
+                        }
+                        self.notice = Some(note(&self.boot.settings.locale, "success", "FRAME_SAVED"));
+                    }
+                    Err(message) => self.fail_text(message),
+                },
                 Job::View(result) => match result {
                     Ok((name, image)) => {
                         self.preview_w = image.width();
@@ -784,6 +819,54 @@ impl Kapture {
         thread::spawn(move || {
             let result = engine.store_still(image).map_err(|e| e.message);
             let _ = tx.send(Job::Done(result));
+        });
+        cx.notify();
+    }
+
+    fn request_frame(&mut self) {
+        self.frame_ticket = self.frame_ticket.wrapping_add(1);
+        let ticket = self.frame_ticket;
+        let path = self.film_path.clone();
+        let at = self.film_at;
+        let locale = self.boot.settings.locale.clone();
+        let tx = self.tx.clone();
+        thread::spawn(move || {
+            let image = (|| -> Result<RgbaImage, String> {
+                let bin = crate::encode::find_tool("ffmpeg").ok_or_else(|| crate::copy::text(&locale, "FFMPEG_MISSING"))?;
+                crate::media::grab_frame(&bin, std::path::Path::new(&path), at)
+                    .map_err(|_| crate::copy::text(&locale, "FRAME_FAILED"))
+            })();
+            let _ = tx.send(Job::FilmFrame { ticket, image });
+        });
+    }
+
+    fn nudge_moment(&mut self, delta_ms: i64, cx: &mut Context<Self>) {
+        let limit = self.film_duration;
+        let next = if delta_ms < 0 {
+            self.film_at.saturating_sub(delta_ms.unsigned_abs())
+        } else {
+            self.film_at.saturating_add(delta_ms as u64)
+        };
+        let next = if limit == 0 { 0 } else { next.min(limit.saturating_sub(1)) };
+        if next == self.film_at && self.frame_image.is_some() {
+            return;
+        }
+        self.film_at = next;
+        self.request_frame();
+        cx.notify();
+    }
+
+    fn save_frame(&mut self, cx: &mut Context<Self>) {
+        let Some(image) = self.frame_image.clone() else {
+            self.notice = Some(note(&self.boot.settings.locale, "error", "FRAME_FAILED"));
+            cx.notify();
+            return;
+        };
+        let engine = Arc::clone(&self.engine);
+        let tx = self.tx.clone();
+        thread::spawn(move || {
+            let result = engine.store_still(image).map_err(|e| e.message);
+            let _ = tx.send(Job::FrameSaved(result));
         });
         cx.notify();
     }
@@ -1358,18 +1441,50 @@ impl Kapture {
         let start = format_ms(self.film_start);
         let end = format_ms(self.film_end);
         let duration = format_ms(self.film_duration);
+        let moment = format_stamp(self.film_at);
         div()
             .size_full()
             .flex()
             .flex_col()
             .items_center()
             .justify_center()
-            .gap(px(18.))
+            .gap(px(14.))
             .bg(rgb(0xf5f4f1))
             .text_color(rgb(0x1c1b18))
             .child(div().text_size(px(13.)).text_color(rgb(0x8a847c)).child(SharedString::from(self.film_name.clone())))
-            .child(div().text_size(px(28.)).child(SharedString::from(format!("{start}  –  {end}"))))
-            .child(div().text_size(px(13.)).text_color(rgb(0x8a847c)).child(SharedString::from(format!("{} {duration}", t.duration))))
+            .child(
+                div()
+                    .w(px(480.))
+                    .h(px(270.))
+                    .rounded(px(16.))
+                    .overflow_hidden()
+                    .bg(rgb(0x111110))
+                    .when_some(self.preview.clone(), |this, image| {
+                        this.child(img(ImageSource::Render(image)).size_full().object_fit(gpui::ObjectFit::Contain))
+                    }),
+            )
+            .child(div().text_size(px(22.)).child(SharedString::from(format!("{}  {moment}", t.instant))))
+            .child(
+                div()
+                    .flex()
+                    .gap(px(8.))
+                    .child(action_button(t.back_sec, false).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                        this.nudge_moment(-1000, cx);
+                    })))
+                    .child(action_button(t.back_step, false).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                        this.nudge_moment(-100, cx);
+                    })))
+                    .child(action_button(t.fwd_step, false).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                        this.nudge_moment(100, cx);
+                    })))
+                    .child(action_button(t.fwd_sec, false).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                        this.nudge_moment(1000, cx);
+                    })))
+                    .child(action_button(t.grab, true).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                        this.save_frame(cx);
+                    }))),
+            )
+            .child(div().text_size(px(13.)).text_color(rgb(0x8a847c)).child(SharedString::from(format!("{start}  –  {end}   ·   {} {duration}", t.duration))))
             .child(self.share_box(t.title, &self.draft, &self.edit_focus, 3, cx))
             .child(
                 div()
@@ -1404,6 +1519,8 @@ impl Kapture {
                         this.save_trim(cx);
                     })))
                     .child(action_button(t.cancel, false).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                        this.preview = None;
+                        this.frame_image = None;
                         this.mode = Mode::Browse;
                         cx.notify();
                     }))),
@@ -1661,6 +1778,12 @@ fn format_ms(ms: u64) -> String {
     format!("{:02}:{:02}", total / 60, total % 60)
 }
 
+fn format_stamp(ms: u64) -> String {
+    let total = ms / 1000;
+    let tenth = (ms % 1000) / 100;
+    format!("{:02}:{:02}.{tenth}", total / 60, total % 60)
+}
+
 fn note(locale: &str, level: &str, code: &str) -> Notice {
     Notice { level: level.into(), code: code.into(), message: copy::text(locale, code) }
 }
@@ -1756,6 +1879,12 @@ struct Texts {
     crop: &'static str,
     pip: &'static str,
     title: &'static str,
+    instant: &'static str,
+    grab: &'static str,
+    back_sec: &'static str,
+    back_step: &'static str,
+    fwd_step: &'static str,
+    fwd_sec: &'static str,
     crop_hint: &'static str,
     save: &'static str,
     duration: &'static str,
@@ -1851,6 +1980,12 @@ fn texts(locale: &str) -> Texts {
             crop: "Crop",
             pip: "Webcam",
             title: "Title on the film",
+            instant: "Moment",
+            grab: "Save this frame",
+            back_sec: "−1 s",
+            back_step: "−0.1 s",
+            fwd_step: "+0.1 s",
+            fwd_sec: "+1 s",
             crop_hint: "Drag to crop.",
             save: "Save",
             duration: "Length",
@@ -1944,6 +2079,12 @@ fn texts(locale: &str) -> Texts {
             crop: "Recadrer",
             pip: "Webcam",
             title: "Texte sur le film",
+            instant: "Instant",
+            grab: "Photo de cet instant",
+            back_sec: "−1 s",
+            back_step: "−0,1 s",
+            fwd_step: "+0,1 s",
+            fwd_sec: "+1 s",
             crop_hint: "Glissez pour recadrer.",
             save: "Enregistrer",
             duration: "Durée",
