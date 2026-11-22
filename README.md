@@ -45,6 +45,21 @@ kapture serve --bind 0.0.0.0:8741 --token un-jeton-long
 
 Dans Réglages, mode **Serveur**, adresse `http://votre-machine:8741`, même jeton. **Envoyer** dans la bibliothèque dépose le fichier et copie le lien. La page d'accueil du serveur liste les captures.
 
+## Coolify
+
+C'est un **Dockerfile**, pas un Compose. Un seul conteneur, le port **8741**, les fichiers dans `/data`.
+
+Dans Coolify : nouvelle application, dépôt `https://github.com/Karom-Studio/kapture`, type de build **Dockerfile**. Port exposé `8741`. Volume persistant monté sur `/data`. Variables :
+
+| Variable | Exemple |
+| --- | --- |
+| `KAPTURE_TOKEN` | un jeton long |
+| `KAPTURE_PUBLIC_URL` | `http://203.0.113.10:8741` |
+
+`KAPTURE_PUBLIC_URL` est l'adresse écrite dans le lien renvoyé. Elle doit être joignable depuis l'ordinateur qui envoie la capture.
+
+L'application parle HTTP simple, pas HTTPS. On publie donc le port `8741` et on met cette adresse `http://…:8741` dans Réglages, mode Serveur, avec le même jeton. La première construction compile tout le programme Rust : elle est longue.
+
 Le mode **Direct** envoie vers un autre Kapture allumé à ce moment-là. Si ce Kapture est éteint, l'envoi échoue : c'est pour ça que le lien passe par le serveur.
 
 ## Lancer

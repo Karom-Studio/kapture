@@ -19,6 +19,10 @@ pub struct Host {
 
 impl Host {
     pub fn start(bind: &str, token: &str, dir: &Path) -> Result<Self, String> {
+        Self::start_public(bind, token, dir, None)
+    }
+
+    pub fn start_public(bind: &str, token: &str, dir: &Path, public: Option<&str>) -> Result<Self, String> {
         if token.trim().is_empty() {
             return Err("missing".into());
         }
@@ -26,7 +30,7 @@ impl Host {
         let listener = TcpListener::bind(bind).map_err(|e| e.to_string())?;
         listener.set_nonblocking(false).ok();
         let port = listener.local_addr().map_err(|e| e.to_string())?.port();
-        let url = format!("http://{}:{port}", lan_ip());
+        let url = public_base(port, public);
         let stop = Arc::new(AtomicBool::new(false));
         let stop_thread = Arc::clone(&stop);
         let token = token.to_string();
@@ -85,9 +89,10 @@ pub fn upload(base: &str, token: &str, file: &Path) -> Result<String, String> {
 }
 
 pub fn serve_cli(args: &[String]) -> i32 {
-    let mut bind = "0.0.0.0:8741".to_string();
-    let mut token = String::new();
-    let mut dir = default_inbox();
+    let mut bind = std::env::var("KAPTURE_BIND").unwrap_or_else(|_| "0.0.0.0:8741".into());
+    let mut token = std::env::var("KAPTURE_TOKEN").unwrap_or_default();
+    let mut dir = std::env::var("KAPTURE_DIR").map(PathBuf::from).unwrap_or_else(|_| default_inbox());
+    let mut public = std::env::var("KAPTURE_PUBLIC_URL").ok();
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
@@ -109,6 +114,12 @@ pub fn serve_cli(args: &[String]) -> i32 {
                     dir = PathBuf::from(value);
                 }
             }
+            "--public" => {
+                index += 1;
+                if let Some(value) = args.get(index) {
+                    public = Some(value.clone());
+                }
+            }
             _ => {}
         }
         index += 1;
@@ -117,7 +128,7 @@ pub fn serve_cli(args: &[String]) -> i32 {
         eprintln!("kapture serve a besoin de --token");
         return 2;
     }
-    match Host::start(&bind, &token, &dir) {
+    match Host::start_public(&bind, &token, &dir, public.as_deref()) {
         Ok(host) => {
             println!("Kapture reçoit sur {}", host.url);
             while !host.stop.load(Ordering::Relaxed) {
@@ -384,6 +395,13 @@ fn host_port(base: &str) -> Result<(String, u16), String> {
     }
 }
 
+fn public_base(port: u16, public: Option<&str>) -> String {
+    match public.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(base) => base.trim_end_matches('/').to_string(),
+        None => format!("http://{}:{port}", lan_ip()),
+    }
+}
+
 fn lan_ip() -> String {
     std::net::UdpSocket::bind("0.0.0.0:0")
         .ok()
@@ -397,6 +415,15 @@ fn lan_ip() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn public_url_replaces_the_lan_address() {
+        assert_eq!(
+            public_base(8741, Some("https://captures.example/")),
+            "https://captures.example"
+        );
+        assert!(public_base(8741, None).ends_with(":8741"));
+    }
 
     #[test]
     fn upload_and_fetch_roundtrip() {
