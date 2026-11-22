@@ -7,7 +7,7 @@ pub fn stamp(now: DateTime<Local>) -> String {
 }
 
 pub fn capture_filename(stamp: &str, ext: &str) -> String {
-    format!("Lueur_{stamp}.{ext}")
+    format!("Oeilleton_{stamp}.{ext}")
 }
 
 pub fn next_available(dir: &Path, filename: &str) -> PathBuf {
@@ -18,7 +18,7 @@ pub fn next_available(dir: &Path, filename: &str) -> PathBuf {
     let stem = Path::new(filename)
         .file_stem()
         .and_then(|s| s.to_str())
-        .unwrap_or("Lueur");
+        .unwrap_or("Oeilleton");
     let ext = Path::new(filename)
         .extension()
         .and_then(|s| s.to_str())
@@ -34,7 +34,7 @@ pub fn next_available(dir: &Path, filename: &str) -> PathBuf {
 
 pub fn is_managed_capture(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    lower.starts_with("lueur_")
+    lower.starts_with("oeilleton_")
         && (lower.ends_with(".png") || lower.ends_with(".mp4"))
         && !lower.contains(".thumb.")
 }
@@ -49,28 +49,28 @@ mod tests {
         let now = Local.with_ymd_and_hms(2026, 11, 22, 10, 30, 45).unwrap();
         let stamp = stamp(now);
         assert_eq!(stamp, "2026-11-22_103045");
-        assert_eq!(capture_filename(&stamp, "png"), "Lueur_2026-11-22_103045.png");
-        assert_eq!(capture_filename(&stamp, "mp4"), "Lueur_2026-11-22_103045.mp4");
+        assert_eq!(capture_filename(&stamp, "png"), "Oeilleton_2026-11-22_103045.png");
+        assert_eq!(capture_filename(&stamp, "mp4"), "Oeilleton_2026-11-22_103045.mp4");
     }
 
     #[test]
     fn next_available_skips_existing_files() {
-        let dir = std::env::temp_dir().join(format!("lueur-name-{}", uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("oeilleton-name-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        let first = next_available(&dir, "Lueur_test.png");
+        let first = next_available(&dir, "Oeilleton_test.png");
         std::fs::write(&first, b"a").unwrap();
-        let second = next_available(&dir, "Lueur_test.png");
+        let second = next_available(&dir, "Oeilleton_test.png");
         assert_ne!(first, second);
-        assert!(second.ends_with("Lueur_test-2.png"));
+        assert!(second.ends_with("Oeilleton_test-2.png"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn managed_names_ignore_foreign_files() {
-        assert!(is_managed_capture("Lueur_2026-11-22_103045.png"));
-        assert!(is_managed_capture("Lueur_2026-11-22_103045.mp4"));
+        assert!(is_managed_capture("Oeilleton_2026-11-22_103045.png"));
+        assert!(is_managed_capture("Oeilleton_2026-11-22_103045.mp4"));
         assert!(!is_managed_capture("notes.png"));
-        assert!(!is_managed_capture("Lueur_x.thumb.png"));
-        assert!(!is_managed_capture("Lueur_x.txt"));
+        assert!(!is_managed_capture("Oeilleton_x.thumb.png"));
+        assert!(!is_managed_capture("Oeilleton_x.txt"));
     }
 }

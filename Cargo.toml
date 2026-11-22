@@ -1,5 +1,5 @@
 [package]
-name = "lueur"
+name = "oeilleton"
 version = "0.1.0"
 description = "Captures d'écran et films, en local, sans navigateur."
 authors = ["Romain"]
@@ -7,7 +7,7 @@ license = "Apache-2.0"
 edition = "2024"
 
 [[bin]]
-name = "lueur"
+name = "oeilleton"
 path = "src/main.rs"
 
 [dependencies]

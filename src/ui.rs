@@ -49,14 +49,14 @@ pub fn run() {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 ..Default::default()
             },
-            move |_, cx| cx.new(|cx| Lueur::new(rx, tx.clone(), cx)),
+            move |_, cx| cx.new(|cx| Oeilleton::new(rx, tx.clone(), cx)),
         )
-        .expect("fenêtre Lueur");
+        .expect("fenêtre Œilleton");
         cx.activate(true);
     });
 }
 
-struct Lueur {
+struct Oeilleton {
     engine: Arc<Engine>,
     tx: Sender<Job>,
     rx: Receiver<Job>,
@@ -77,7 +77,7 @@ struct Lueur {
     started: bool,
 }
 
-impl Lueur {
+impl Oeilleton {
     fn new(rx: Receiver<Job>, tx: Sender<Job>, cx: &mut Context<Self>) -> Self {
         let engine = Arc::new(Engine::new());
         let boot = engine.bootstrap();
@@ -728,7 +728,7 @@ impl Lueur {
         label: &'static str,
         options: &[(&'static str, bool)],
         cx: &mut Context<Self>,
-        apply: fn(&mut Lueur, usize),
+        apply: fn(&mut Oeilleton, usize),
     ) -> impl IntoElement {
         div()
             .flex()
@@ -829,7 +829,7 @@ impl Lueur {
     }
 }
 
-impl Render for Lueur {
+impl Render for Oeilleton {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         match self.mode {
             Mode::Preparing => div()
@@ -851,8 +851,8 @@ impl Render for Lueur {
 fn nav_button(
     label: &'static str,
     active: bool,
-    cx: &mut Context<Lueur>,
-    f: fn(&mut Lueur, &mut Context<Lueur>),
+    cx: &mut Context<Oeilleton>,
+    f: fn(&mut Oeilleton, &mut Context<Oeilleton>),
 ) -> gpui::Div {
     let bg = if active { rgb(0x2a241c) } else { rgb(0x181511) };
     div()
@@ -882,8 +882,8 @@ fn small_button(label: &'static str) -> gpui::Div {
 fn toggle_row(
     label: &'static str,
     on: bool,
-    cx: &mut Context<Lueur>,
-    flip: fn(&mut Lueur),
+    cx: &mut Context<Oeilleton>,
+    flip: fn(&mut Oeilleton),
 ) -> impl IntoElement {
     div()
         .flex()
@@ -998,7 +998,7 @@ struct Texts {
 fn texts(locale: &str) -> Texts {
     if locale == "en" {
         Texts {
-            name: "Lueur",
+            name: "Œilleton",
             kicker: "Local capture",
             home_title: "What do you want to keep?",
             home: "Home",
@@ -1012,7 +1012,7 @@ fn texts(locale: &str) -> Texts {
             region_body: "Draw the frame yourself.",
             photo: "Still",
             film: "Film",
-            devices: "What Lueur can see and hear",
+            devices: "What Œilleton can see and hear",
             screen_dev: "Screen",
             mic_dev: "Microphone",
             system_dev: "System audio",
@@ -1062,7 +1062,7 @@ fn texts(locale: &str) -> Texts {
         }
     } else {
         Texts {
-            name: "Lueur",
+            name: "Œilleton",
             kicker: "Capture locale",
             home_title: "Que voulez-vous garder ?",
             home: "Accueil",
@@ -1076,7 +1076,7 @@ fn texts(locale: &str) -> Texts {
             region_body: "Tracez le cadre à la main.",
             photo: "Photo",
             film: "Film",
-            devices: "Ce que Lueur peut voir et entendre",
+            devices: "Ce qu'Œilleton peut voir et entendre",
             screen_dev: "Écran",
             mic_dev: "Micro",
             system_dev: "Son du système",
@@ -1136,7 +1136,7 @@ fn install_tray(tx: Sender<Job>) {
     let _ = menu.append(&MenuItem::with_id("record", "Enregistrer l'écran", true, None));
     let _ = menu.append(&MenuItem::with_id("quit", "Quitter", true, None));
     let icon = tray_icon_image();
-    if let Ok(tray) = TrayIconBuilder::new().with_menu(Box::new(menu)).with_tooltip("Lueur").with_icon(icon).build() {
+    if let Ok(tray) = TrayIconBuilder::new().with_menu(Box::new(menu)).with_tooltip("Œilleton").with_icon(icon).build() {
         Box::leak(Box::new((tray, tx)));
     }
     let _ = MenuEvent::receiver();
@@ -1153,7 +1153,7 @@ fn tray_loop(tx: Sender<Job>) {
     let icon = tray_icon_image();
     let _tray = TrayIconBuilder::new()
         .with_menu(Box::new(menu))
-        .with_tooltip("Lueur")
+        .with_tooltip("Œilleton")
         .with_icon(icon)
         .build();
         loop {

@@ -95,7 +95,7 @@ impl Library {
         self.items.iter().find(|item| item.id == id)
     }
 
-    /// Drop missing files and adopt `Lueur_*` files that appeared in the folder.
+    /// Drop missing files and adopt `Oeilleton_*` files that appeared in the folder.
     pub fn reconcile(&mut self, output_dir: &Path) {
         self.items.retain(|item| Path::new(&item.path).is_file());
         let Ok(entries) = fs::read_dir(output_dir) else {
@@ -158,7 +158,7 @@ mod tests {
     use super::*;
 
     fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("lueur-{name}-{}", Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("oeilleton-{name}-{}", Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
         dir
     }
@@ -167,7 +167,7 @@ mod tests {
         CaptureRecord {
             id: "one".into(),
             kind: "screenshot".into(),
-            filename: "Lueur_a.png".into(),
+            filename: "Oeilleton_a.png".into(),
             path: path.display().to_string(),
             created_at: "2026-11-22T10:00:00+00:00".into(),
             width: 10,
@@ -181,7 +181,7 @@ mod tests {
     #[test]
     fn insert_remove_and_drop_missing_files() {
         let dir = temp_dir("lib");
-        let file = dir.join("Lueur_a.png");
+        let file = dir.join("Oeilleton_a.png");
         fs::write(&file, b"png").unwrap();
         let mut library = Library::default();
         library.insert(record(&file));
@@ -195,15 +195,15 @@ mod tests {
     #[test]
     fn reconcile_adopts_managed_names_only() {
         let dir = temp_dir("scan");
-        fs::write(dir.join("Lueur_2026-11-22_103045.png"), b"png").unwrap();
+        fs::write(dir.join("Oeilleton_2026-11-22_103045.png"), b"png").unwrap();
         fs::write(dir.join("notes.png"), b"nope").unwrap();
         let mut library = Library::default();
         library.reconcile(&dir);
         assert_eq!(library.items().len(), 1);
-        assert_eq!(library.items()[0].filename, "Lueur_2026-11-22_103045.png");
+        assert_eq!(library.items()[0].filename, "Oeilleton_2026-11-22_103045.png");
         let id = library.items()[0].id.clone();
         let removed = library.remove(&id).unwrap();
-        assert!(removed.path.contains("Lueur_"));
+        assert!(removed.path.contains("Oeilleton_"));
         let _ = fs::remove_dir_all(&dir);
     }
 }

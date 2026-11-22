@@ -84,7 +84,7 @@ impl Session {
         request.output = output.display().to_string();
         let args = encode::build_args(&request);
         let bin = encode::find_tool("ffmpeg").ok_or_else(|| fail(locale, "FFMPEG_MISSING"))?;
-        eprintln!("lueur: ffmpeg {}", args.join(" "));
+        eprintln!("oeilleton: ffmpeg {}", args.join(" "));
         let stderr = OpenOptions::new()
             .create(true)
             .append(true)
@@ -288,7 +288,7 @@ mod tests {
             return;
         }
         let display = std::env::var("DISPLAY").unwrap_or_else(|_| ":0".into());
-        let output = std::env::temp_dir().join(format!("lueur-smoke-{}.mp4", std::process::id()));
+        let output = std::env::temp_dir().join(format!("oeilleton-smoke-{}.mp4", std::process::id()));
         let _ = fs::remove_file(&output);
         let request = EncodeRequest {
             grab: Grab::X11 { display, x: 40, y: 40 },
