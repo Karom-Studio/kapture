@@ -38,7 +38,7 @@ impl Drop for Guard {
 
 #[cfg(target_os = "linux")]
 mod linux {
-    use super::{is_self_label, Guard};
+    use super::Guard;
     use std::ffi::{c_char, c_int, c_ulong, c_void};
     use std::thread;
     use std::time::Duration;
@@ -47,6 +47,7 @@ mod linux {
     type XWindow = c_ulong;
 
     unsafe extern "C" {
+        fn XSetErrorHandler(handler: Option<unsafe extern "C" fn(*mut Display, *mut c_void) -> c_int>) -> *mut c_void;
         fn XOpenDisplay(name: *const c_char) -> *mut Display;
         fn XCloseDisplay(display: *mut Display) -> c_int;
         fn XUnmapWindow(display: *mut Display, window: XWindow) -> c_int;
@@ -66,6 +67,7 @@ mod linux {
 
     pub fn hide() -> Option<Guard> {
         unsafe {
+            XSetErrorHandler(Some(quiet));
             let display = XOpenDisplay(std::ptr::null());
             if display.is_null() {
                 return None;
@@ -97,22 +99,13 @@ mod linux {
                 }
             }
         }
-        if ids.is_empty() {
-            if let Ok(windows) = xcap::Window::all() {
-                for window in windows {
-                    let title = window.title().unwrap_or_default();
-                    let app = window.app_name().unwrap_or_default();
-                    if is_self_label(&title) || is_self_label(&app) {
-                        if let Ok(id) = window.id() {
-                            ids.push(id as XWindow);
-                        }
-                    }
-                }
-            }
-        }
         ids.sort_unstable();
         ids.dedup();
         ids
+    }
+
+    unsafe extern "C" fn quiet(_display: *mut Display, _event: *mut c_void) -> c_int {
+        0
     }
 
     pub fn show(hidden: &Hidden) {
