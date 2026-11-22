@@ -267,11 +267,16 @@ impl Engine {
         if self.lock().session.is_some() { self.stop() } else { self.start_screen(None) }
     }
 
-    pub fn open_capture(&self, id: &str) -> Cmd<()> {
-        let model = self.lock();
-        let record = model.library.get(id).ok_or_else(|| fail(&model.settings.locale, "UNKNOWN"))?;
-        open::that(&record.path).map_err(|e| CommandError::new("IO", e.to_string()))?;
-        Ok(())
+    pub fn open_film(&self, path: &str) -> Cmd<()> {
+        let locale = self.locale();
+        for (program, extra) in [("mpv", &[][..]), ("vlc", &[]), ("totem", &[]), ("ffplay", &["-autoexit"][..])] {
+            let mut command = std::process::Command::new(program);
+            command.args(extra).arg(path);
+            if command.spawn().is_ok() {
+                return Ok(());
+            }
+        }
+        Err(fail(&locale, "NO_PLAYER"))
     }
 
     pub fn reveal_capture(&self, id: &str) -> Cmd<()> {

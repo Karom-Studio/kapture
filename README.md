@@ -22,7 +22,7 @@ Le moteur est séparé de l'interface : `xcap` parle aux API natives (X11, porta
 - Film de l'écran, d'une fenêtre ou d'une zone. Pause, reprise, stop. MP4 local. Micro, son du système et bulle caméra quand le matériel existe.
 - Icône native dans la barre de statut.
 - Raccourcis globaux.
-- Bibliothèque : ouvrir, montrer le dossier, supprimer.
+- Bibliothèque : une photo s'ouvre dans Kapture. Le dossier et la suppression restent là. Un film s'ouvre dans un lecteur vidéo, pas dans le navigateur.
 - Réglages : dossier, hauteur jusqu'à la 4K sans agrandir, cadence, qualité, curseur, micro, son, bulle.
 - Français par défaut, anglais au bouton de langue.
 

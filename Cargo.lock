@@ -3435,7 +3435,6 @@ dependencies = [
  "gtk",
  "image",
  "libc",
- "open",
  "rfd",
  "serde",
  "serde_json",

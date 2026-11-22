@@ -44,6 +44,11 @@ pub fn text(locale: &str, code: &str) -> String {
         "NO_SYSTEM_AUDIO" => if en { "No system-audio source found." } else { "Aucune source pour le son du système." },
         "NO_CAMERA" => if en { "No camera found. The film will not have a bubble." } else { "Aucune caméra trouvée. Le film n'aura pas de bulle." },
         "DELETED" => if en { "Deleted." } else { "Supprimé." },
+        "NO_PLAYER" => if en {
+            "No video player found. The film stays in the library."
+        } else {
+            "Aucun lecteur vidéo. Le film reste dans la bibliothèque."
+        },
         "HOTKEY_OS" => if en { "The system refused a shortcut." } else { "Le système a refusé un raccourci." },
         "SCREEN_X11" => if en { "X11 session: no extra permission dialog." } else { "Session X11 : pas de fenêtre d'autorisation supplémentaire." },
         "SCREEN_WAYLAND" => if en { "Wayland: the desktop portal opens on the next screenshot." } else { "Wayland : le portail du bureau s'ouvre à la prochaine photo." },

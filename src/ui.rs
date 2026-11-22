@@ -23,7 +23,7 @@ use crate::settings::{Corner, Hotkeys, Quality, Settings, VideoHeight, WebcamSiz
 
 enum Page { Home, Library, Settings }
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Mode { Browse, Preparing, Region, Recording }
+enum Mode { Browse, Preparing, Region, Recording, Viewer }
 #[derive(Clone, Copy)]
 enum HotAct { ShotScreen, ShotWindow, ShotRegion, RecordToggle, RecordPause }
 enum Job {
@@ -33,6 +33,7 @@ enum Job {
     Windows { intent: String, rows: Vec<crate::dto::WindowDto> },
     Folder(Option<std::path::PathBuf>),
     Command(HotAct),
+    View(Result<(String, RgbaImage), String>),
 }
 
 pub fn run() {
@@ -68,6 +69,7 @@ struct Kapture {
     preview: Option<Arc<RenderImage>>,
     preview_w: u32,
     preview_h: u32,
+    viewer_name: String,
     drag: Option<(Point<Pixels>, Point<Pixels>)>,
     picker: Option<(String, Vec<crate::dto::WindowDto>)>,
     manager: Option<GlobalHotKeyManager>,
@@ -93,6 +95,7 @@ impl Kapture {
             preview: None,
             preview_w: 0,
             preview_h: 0,
+            viewer_name: String::new(),
             drag: None,
             picker: None,
             manager: GlobalHotKeyManager::new().ok(),
@@ -173,6 +176,17 @@ impl Kapture {
                     self.persist_settings(cx);
                 }
                 Job::Folder(None) => {}
+                Job::View(result) => match result {
+                    Ok((name, image)) => {
+                        self.preview_w = image.width();
+                        self.preview_h = image.height();
+                        self.preview = Some(rgba_image(&image));
+                        self.viewer_name = name;
+                        self.mode = Mode::Viewer;
+                        self.page = Page::Library;
+                    }
+                    Err(message) => self.fail_text(message),
+                },
             }
         }
         if self.boot.recording.phase == "recording" {
@@ -625,11 +639,27 @@ impl Kapture {
             .rounded(px(14.))
             .child(div().flex_1().child(SharedString::from(meta)))
             .child(small_button(t.open).on_mouse_up(MouseButton::Left, cx.listener({
-                let id = id.clone();
+                let path = item.record.path.clone();
+                let filename = item.record.filename.clone();
+                let film = item.record.kind == "recording";
                 move |this, _, _, cx| {
-                    if let Err(err) = this.engine.open_capture(&id) {
-                        this.notice = Some(notice_from(err));
+                    if film {
+                        if let Err(err) = this.engine.open_film(&path) {
+                            this.notice = Some(notice_from(err));
+                        }
+                        cx.notify();
+                        return;
                     }
+                    this.mode = Mode::Preparing;
+                    let tx = this.tx.clone();
+                    let path = path.clone();
+                    let filename = filename.clone();
+                    thread::spawn(move || {
+                        let loaded = image::open(&path)
+                            .map(|img| (filename, img.to_rgba8()))
+                            .map_err(|err| err.to_string());
+                        let _ = tx.send(Job::View(loaded));
+                    });
                     cx.notify();
                 }
             })))
@@ -821,6 +851,36 @@ impl Kapture {
             )
     }
 
+    fn viewer(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = texts(&self.boot.settings.locale);
+        div()
+            .size_full()
+            .relative()
+            .bg(rgb(0xf5f4f1))
+            .when_some(self.preview.clone(), |this, image| {
+                this.child(img(ImageSource::Render(image)).size_full().object_fit(gpui::ObjectFit::Contain))
+            })
+            .child(
+                div()
+                    .absolute()
+                    .top(px(16.))
+                    .left(px(16.))
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .px(px(12.))
+                    .py(px(8.))
+                    .rounded(px(14.))
+                    .bg(rgb(0x1c1b18))
+                    .child(div().text_color(rgb(0xf7f6f3)).child(SharedString::from(self.viewer_name.clone())))
+                    .child(overlay_button(t.close, true).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                        this.preview = None;
+                        this.mode = Mode::Browse;
+                        cx.notify();
+                    }))),
+            )
+    }
+
     fn record_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let t = texts(&self.boot.settings.locale);
         let elapsed = format_ms(self.boot.recording.elapsed_ms);
@@ -860,6 +920,7 @@ impl Render for Kapture {
                 .into_any_element(),
             Mode::Region => self.region_view(cx).into_any_element(),
             Mode::Recording => self.record_bar(cx).into_any_element(),
+            Mode::Viewer => self.viewer(cx).into_any_element(),
             Mode::Browse => self.render_shell(cx).into_any_element(),
         }
     }
@@ -1017,6 +1078,7 @@ struct Texts {
     preparing: &'static str,
     drag_hint: &'static str,
     cancel: &'static str,
+    close: &'static str,
     pause: &'static str,
     resume: &'static str,
     stop: &'static str,
@@ -1084,6 +1146,7 @@ fn texts(locale: &str) -> Texts {
             preparing: "One moment…",
             drag_hint: "Drag to frame the area.",
             cancel: "Cancel",
+            close: "Close",
             pause: "Pause",
             resume: "Resume",
             stop: "Stop",
@@ -1149,6 +1212,7 @@ fn texts(locale: &str) -> Texts {
             preparing: "Un instant…",
             drag_hint: "Glissez pour encadrer la zone.",
             cancel: "Annuler",
+            close: "Fermer",
             pause: "Pause",
             resume: "Reprendre",
             stop: "Stop",
