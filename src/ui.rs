@@ -934,87 +934,25 @@ impl Kapture {
                 MouseButton::Left,
                 cx.listener(move |this, _, _, cx| this.open_library_item(path.clone(), filename.clone(), film, cx)),
             ))
-            .child(div().text_size(px(12.)).text_color(rgb(0x6f6a64)).child(SharedString::from(format!("{label} · {name}"))))
+            .overflow_hidden()
             .child(
                 div()
-                    .flex()
-                    .gap(px(6.))
-                    .child(small_button(t.open).on_mouse_up(MouseButton::Left, cx.listener({
-                        let path = item.record.path.clone();
-                        let filename = item.record.filename.clone();
-                        let film = item.record.kind == "recording";
-                        move |this, _, _, cx| this.open_library_item(path.clone(), filename.clone(), film, cx)
-                    })))
-                    .child(small_button(t.edit).on_mouse_up(MouseButton::Left, cx.listener({
-                        let path = item.record.path.clone();
-                        let filename = item.record.filename.clone();
-                        let film = item.record.kind == "recording";
-                        move |this, _, _, cx| this.edit_library_item(path.clone(), filename.clone(), film, cx)
-                    })))
-                    .child(small_button(t.send).on_mouse_up(MouseButton::Left, cx.listener({
-                        let id = item.record.id.clone();
-                        move |this, _, _, cx| this.send_library_item(&id, cx)
-                    })))
-                    .child(small_button(t.reveal).on_mouse_up(MouseButton::Left, cx.listener({
-                        let id = item.record.id.clone();
-                        move |this, _, _, cx| {
-                            if let Err(err) = this.engine.reveal_capture(&id) {
-                                this.notice = Some(notice_from(err));
-                            }
-                            cx.notify();
-                        }
-                    })))
-                    .child(small_button(t.delete).on_mouse_up(MouseButton::Left, cx.listener({
-                        let id = item.record.id.clone();
-                        move |this, _, _, cx| {
-                            match this.engine.delete_capture(&id) {
-                                Ok(removed) => {
-                                    this.boot.library.retain(|row| row.record.id != removed);
-                                    this.thumbs.remove(&removed);
-                                    this.notice = Some(note(&this.boot.settings.locale, "info", "DELETED"));
-                                }
-                                Err(err) => this.notice = Some(notice_from(err)),
-                            }
-                            cx.notify();
-                        }
-                    }))),
+                    .w(px(264.))
+                    .text_size(px(12.))
+                    .text_color(rgb(0x6f6a64))
+                    .truncate()
+                    .child(SharedString::from(format!("{label} · {name}"))),
             )
+            .child(self.capture_actions(item, t, cx))
     }
 
-    fn library_row(&self, item: &CaptureDto, t: &Texts, cx: &mut Context<Self>) -> impl IntoElement {
+    fn capture_actions(&self, item: &CaptureDto, t: &Texts, cx: &mut Context<Self>) -> gpui::Div {
         let id = item.record.id.clone();
-        let kind = if item.record.kind == "recording" { t.film } else { t.photo };
-        let meta = format!(
-            "{kind} · {}×{} · {}",
-            item.record.width, item.record.height, item.record.filename
-        );
-        let hovered = self.hovered.as_deref() == Some(item.record.id.as_str());
-        let thumb = self.thumb(&item.record.id);
         div()
-            .id(SharedString::from(format!("row-{}", item.record.id)))
+            .w(px(264.))
             .flex()
-            .items_center()
-            .gap(px(12.))
-            .p(px(12.))
-            .bg(rgb(0xffffff))
-            .border_1()
-            .border_color(rgb(0xe6e1da))
-            .rounded(px(14.))
-            .on_hover(cx.listener({
-                let id = item.record.id.clone();
-                move |this, inside: &bool, _, cx| {
-                    if *inside {
-                        this.hovered = Some(id.clone());
-                    } else if this.hovered.as_deref() == Some(id.as_str()) {
-                        this.hovered = None;
-                    }
-                    cx.notify();
-                }
-            }))
-            .when(hovered, |row| {
-                row.child(thumb_box(thumb.clone(), px(200.), px(112.)))
-            })
-            .child(div().flex_1().child(SharedString::from(meta)))
+            .flex_wrap()
+            .gap(px(6.))
             .child(small_button(t.open).on_mouse_up(MouseButton::Left, cx.listener({
                 let path = item.record.path.clone();
                 let filename = item.record.filename.clone();
@@ -1046,6 +984,7 @@ impl Kapture {
                     match this.engine.delete_capture(&id) {
                         Ok(removed) => {
                             this.boot.library.retain(|row| row.record.id != removed);
+                            this.thumbs.remove(&removed);
                             this.notice = Some(note(&this.boot.settings.locale, "info", "DELETED"));
                         }
                         Err(err) => this.notice = Some(notice_from(err)),
@@ -1053,6 +992,47 @@ impl Kapture {
                     cx.notify();
                 }
             })))
+    }
+
+    fn library_row(&self, item: &CaptureDto, t: &Texts, cx: &mut Context<Self>) -> impl IntoElement {
+        let kind = if item.record.kind == "recording" { t.film } else { t.photo };
+        let meta = format!(
+            "{kind} · {}×{} · {}",
+            item.record.width, item.record.height, item.record.filename
+        );
+        let hovered = self.hovered.as_deref() == Some(item.record.id.as_str());
+        let thumb = self.thumb(&item.record.id);
+        div()
+            .id(SharedString::from(format!("row-{}", item.record.id)))
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .p(px(12.))
+            .bg(rgb(0xffffff))
+            .border_1()
+            .border_color(rgb(0xe6e1da))
+            .rounded(px(14.))
+            .overflow_hidden()
+            .on_hover(cx.listener({
+                let id = item.record.id.clone();
+                move |this, inside: &bool, _, cx| {
+                    if *inside {
+                        this.hovered = Some(id.clone());
+                    } else if this.hovered.as_deref() == Some(id.as_str()) {
+                        this.hovered = None;
+                    }
+                    cx.notify();
+                }
+            }))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(12.))
+                    .when(hovered, |row| row.child(thumb_box(thumb.clone(), px(200.), px(112.))))
+                    .child(div().flex_1().overflow_hidden().truncate().child(SharedString::from(meta))),
+            )
+            .child(self.capture_actions(item, t, cx).w(px(640.)))
     }
 
     fn settings(&self, t: &Texts, cx: &mut Context<Self>) -> gpui::Div {
@@ -1733,7 +1713,15 @@ fn overlay_button(label: &'static str, filled: bool) -> gpui::Div {
 }
 
 fn small_button(label: &'static str) -> gpui::Div {
-    action_button(label, false)
+    div()
+        .px(px(10.))
+        .py(px(6.))
+        .rounded(px(999.))
+        .border_1()
+        .border_color(rgb(0xd9d3cb))
+        .text_size(px(13.))
+        .cursor_pointer()
+        .child(SharedString::from(label))
 }
 
 fn toggle_row(
