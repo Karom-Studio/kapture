@@ -379,8 +379,8 @@ impl Kapture {
         div()
             .flex()
             .size_full()
-            .bg(rgb(0x12100e))
-            .text_color(rgb(0xf4efe6))
+            .bg(rgb(0xf5f4f1))
+            .text_color(rgb(0x1c1b18))
             .child(self.sidebar(&t, page, cx))
             .child(
                 div()
@@ -390,7 +390,7 @@ impl Kapture {
                     .h_full()
                     .id("content")
                     .overflow_y_scroll()
-                    .p(px(28.))
+                    .p(px(36.))
                     .child(self.notice_bar())
                     .child(match self.page {
                         Page::Home => self.home(&t, cx).into_any_element(),
@@ -402,19 +402,20 @@ impl Kapture {
 
     fn sidebar(&self, t: &Texts, page: usize, cx: &mut Context<Self>) -> impl IntoElement {
         div()
-            .w(px(220.))
+            .w(px(196.))
             .h_full()
-            .bg(rgb(0x181511))
+            .bg(rgb(0xffffff))
             .border_r_1()
-            .border_color(rgb(0x2c261f))
+            .border_color(rgb(0xe6e1da))
             .flex()
             .flex_col()
-            .p(px(18.))
-            .gap(px(8.))
+            .p(px(20.))
+            .gap(px(4.))
             .child(
                 div()
-                    .text_size(px(34.))
-                    .child(SharedString::from(format!("{} ·", t.name))),
+                    .text_size(px(20.))
+                    .mb(px(16.))
+                    .child(SharedString::from(t.name)),
             )
             .child(nav_button(t.home, page == 0, cx, |this, cx| {
                 this.page = Page::Home;
@@ -431,14 +432,14 @@ impl Kapture {
             .child(div().flex_1())
             .child(
                 div()
-                    .text_size(px(12.))
-                    .text_color(rgb(0xb7ab9c))
+                    .text_size(px(11.))
+                    .text_color(rgb(0x8a847c))
                     .child(SharedString::from(t.byline)),
             )
             .child(
                 div()
-                    .text_size(px(12.))
-                    .text_color(rgb(0x8d8274))
+                    .text_size(px(11.))
+                    .text_color(rgb(0xb0aaa2))
                     .child(SharedString::from(format!("v{}", self.boot.version))),
             )
     }
@@ -446,7 +447,7 @@ impl Kapture {
     fn notice_bar(&self) -> impl IntoElement {
         let note = self.notice.clone();
         div().when_some(note, |this, note| {
-            let color = if note.level == "error" { rgb(0xe36a55) } else { rgb(0xe4a15c) };
+            let color = if note.level == "error" { rgb(0xb42318) } else { rgb(0x3f6b4a) };
             this.mb(px(12.)).text_color(color).child(SharedString::from(note.message))
         })
     }
@@ -459,10 +460,10 @@ impl Kapture {
         div()
             .flex()
             .flex_col()
-            .gap(px(16.))
-            .child(div().text_size(px(13.)).text_color(rgb(0xb7ab9c)).child(SharedString::from(t.kicker)))
-            .child(div().text_size(px(40.)).child(SharedString::from(t.home_title)))
-            .child(div().text_color(rgb(0xb7ab9c)).child(SharedString::from(lead)))
+            .gap(px(20.))
+            .child(div().text_size(px(12.)).text_color(rgb(0x8a847c)).child(SharedString::from(t.kicker)))
+            .child(div().text_size(px(28.)).child(SharedString::from(t.home_title)))
+            .child(div().text_size(px(13.)).text_color(rgb(0x8a847c)).child(SharedString::from(lead)))
             .child(
                 div()
                     .flex()
@@ -471,15 +472,15 @@ impl Kapture {
                     .child(self.card(t.window, t.window_body, cx, false))
                     .child(self.card(t.region, t.region_body, cx, false)),
             )
-            .child(div().mt(px(8.)).text_size(px(18.)).child(SharedString::from(t.devices)))
+            .child(div().mt(px(12.)).text_size(px(13.)).text_color(rgb(0x8a847c)).child(SharedString::from(t.devices)))
             .child(self.device_line(&t.screen_dev, &self.boot.report.screen.state))
             .child(self.device_line(&t.mic_dev, &self.boot.report.microphone.state))
             .child(self.device_line(&t.system_dev, &self.boot.report.system_audio.state))
             .child(self.device_line(&t.camera_dev, &self.boot.report.camera.state))
             .child(
                 div()
-                    .text_size(px(13.))
-                    .text_color(rgb(0xb7ab9c))
+                    .text_size(px(12.))
+                    .text_color(rgb(0x8a847c))
                     .child(SharedString::from(t.bar_hint)),
             )
             .when(self.picker.is_some(), |this| this.child(self.picker_list(t, cx)))
@@ -492,15 +493,15 @@ impl Kapture {
             .flex()
             .flex_col()
             .flex_1()
-            .p(px(16.))
-            .gap(px(8.))
-            .bg(rgb(0x1e1a16))
+            .p(px(20.))
+            .gap(px(10.))
+            .bg(rgb(0xffffff))
             .border_1()
-            .border_color(rgb(0x322b24))
-            .rounded(px(16.))
-            .min_h(px(210.))
-            .child(div().text_size(px(24.)).child(SharedString::from(title)))
-            .child(div().text_color(rgb(0xb7ab9c)).text_size(px(14.)).child(SharedString::from(body)))
+            .border_color(rgb(0xe6e1da))
+            .rounded(px(18.))
+            .min_h(px(176.))
+            .child(div().text_size(px(18.)).child(SharedString::from(title)))
+            .child(div().text_color(rgb(0x8a847c)).text_size(px(13.)).child(SharedString::from(body)))
             .child(div().flex_1())
             .child(
                 div()
@@ -540,8 +541,10 @@ impl Kapture {
         div()
             .mt(px(8.))
             .p(px(12.))
-            .bg(rgb(0x181511))
-            .rounded(px(12.))
+            .bg(rgb(0xffffff))
+            .border_1()
+            .border_color(rgb(0xe6e1da))
+            .rounded(px(14.))
             .child(div().mb(px(8.)).child(SharedString::from(t.pick_window)))
             .children(rows.into_iter().map(|row| {
                 let id = row.id.clone();
@@ -586,17 +589,17 @@ impl Kapture {
             _ => if locale == "en" { "unavailable" } else { "indisponible" },
         };
         div()
-            .text_size(px(14.))
-            .text_color(rgb(0xb7ab9c))
+            .text_size(px(13.))
+            .text_color(rgb(0x6f6a64))
             .child(SharedString::from(format!("{label} · {state_label}")))
     }
 
     fn library(&self, t: &Texts, cx: &mut Context<Self>) -> gpui::Div {
         let mut column = div().flex().flex_col().gap(px(12.)).child(
-            div().text_size(px(32.)).child(SharedString::from(t.library)),
+            div().text_size(px(28.)).child(SharedString::from(t.library)),
         );
         if self.boot.library.is_empty() {
-            return column.child(div().text_color(rgb(0xb7ab9c)).child(SharedString::from(t.empty)));
+            return column.child(div().text_color(rgb(0x8a847c)).child(SharedString::from(t.empty)));
         }
         for item in &self.boot.library {
             column = column.child(self.library_row(item, t, cx));
@@ -615,9 +618,11 @@ impl Kapture {
             .flex()
             .items_center()
             .gap(px(12.))
-            .p(px(10.))
-            .bg(rgb(0x1e1a16))
-            .rounded(px(12.))
+            .p(px(12.))
+            .bg(rgb(0xffffff))
+            .border_1()
+            .border_color(rgb(0xe6e1da))
+            .rounded(px(14.))
             .child(div().flex_1().child(SharedString::from(meta)))
             .child(small_button(t.open).on_mouse_up(MouseButton::Left, cx.listener({
                 let id = id.clone();
@@ -658,8 +663,8 @@ impl Kapture {
             .flex()
             .flex_col()
             .gap(px(14.))
-            .child(div().text_size(px(32.)).child(SharedString::from(t.settings)))
-            .child(div().text_color(rgb(0xb7ab9c)).child(SharedString::from(s.output_dir.clone())))
+            .child(div().text_size(px(28.)).child(SharedString::from(t.settings)))
+            .child(div().text_color(rgb(0x8a847c)).child(SharedString::from(s.output_dir.clone())))
             .child(action_button(t.browse, true).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, _| {
                 let tx = this.tx.clone();
                 thread::spawn(move || {
@@ -720,9 +725,9 @@ impl Kapture {
             ], cx, |this, index| {
                 this.boot.settings.webcam_position = [Corner::TopLeft, Corner::TopRight, Corner::BottomLeft, Corner::BottomRight][index];
             }))
-            .child(div().text_color(rgb(0xb7ab9c)).child(SharedString::from(shortcut_line(&s.hotkeys))))
+            .child(div().text_color(rgb(0x8a847c)).child(SharedString::from(shortcut_line(&s.hotkeys))))
             .child(div().mt(px(8.)).text_size(px(18.)).child(SharedString::from(t.later)))
-            .child(div().text_color(rgb(0xb7ab9c)).child(SharedString::from(t.later_body)))
+            .child(div().text_color(rgb(0x8a847c)).child(SharedString::from(t.later_body)))
             .child(action_button(t.lang, false).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
                 this.boot.settings.locale = if this.boot.settings.locale == "en" { "fr".into() } else { "en".into() };
                 this.persist_settings(cx);
@@ -768,7 +773,7 @@ impl Kapture {
                 .w(px(w))
                 .h(px(h))
                 .border_2()
-                .border_color(rgb(0xe4a15c))
+                .border_color(rgb(0x1c1b18))
         });
         div()
             .size_full()
@@ -794,15 +799,20 @@ impl Kapture {
                     .top(px(16.))
                     .left(px(16.))
                     .flex()
+                    .items_center()
                     .gap(px(8.))
-                    .child(div().text_color(rgb(0xf4efe6)).child(SharedString::from(t.drag_hint)))
-                    .child(action_button(t.photo, false).on_mouse_up(MouseButton::Left, cx.listener(|this, _, window, cx| {
+                    .px(px(12.))
+                    .py(px(8.))
+                    .rounded(px(14.))
+                    .bg(rgb(0x1c1b18))
+                    .child(div().text_color(rgb(0xf7f6f3)).child(SharedString::from(t.drag_hint)))
+                    .child(overlay_button(t.photo, false).on_mouse_up(MouseButton::Left, cx.listener(|this, _, window, cx| {
                         this.finish_region(false, window, cx);
                     })))
-                    .child(action_button(t.film, true).on_mouse_up(MouseButton::Left, cx.listener(|this, _, window, cx| {
+                    .child(overlay_button(t.film, true).on_mouse_up(MouseButton::Left, cx.listener(|this, _, window, cx| {
                         this.finish_region(true, window, cx);
                     })))
-                    .child(action_button(t.cancel, false).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                    .child(overlay_button(t.cancel, false).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
                         this.engine.cancel_region();
                         this.preview = None;
                         this.mode = Mode::Browse;
@@ -821,9 +831,10 @@ impl Kapture {
             .items_center()
             .justify_center()
             .gap(px(16.))
-            .bg(rgb(0x12100e))
-            .child(div().size(px(12.)).rounded(px(6.)).bg(rgb(0xe36a55)))
-            .child(div().text_size(px(36.)).child(SharedString::from(elapsed)))
+            .bg(rgb(0xf5f4f1))
+            .text_color(rgb(0x1c1b18))
+            .child(div().size(px(10.)).rounded(px(5.)).bg(rgb(0xd92d20)))
+            .child(div().text_size(px(28.)).child(SharedString::from(elapsed)))
             .child(action_button(if paused { t.resume } else { t.pause }, false).on_mouse_up(
                 MouseButton::Left,
                 cx.listener(|this, _, _, cx| this.spawn_pause(cx)),
@@ -840,11 +851,11 @@ impl Render for Kapture {
         match self.mode {
             Mode::Preparing => div()
                 .size_full()
-                .bg(rgb(0x12100e))
+                .bg(rgb(0xf5f4f1))
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_color(rgb(0xf4efe6))
+                .text_color(rgb(0x1c1b18))
                 .child(SharedString::from(texts(&self.boot.settings.locale).preparing))
                 .into_any_element(),
             Mode::Region => self.region_view(cx).into_any_element(),
@@ -860,7 +871,7 @@ fn nav_button(
     cx: &mut Context<Kapture>,
     f: fn(&mut Kapture, &mut Context<Kapture>),
 ) -> gpui::Div {
-    let bg = if active { rgb(0x2a241c) } else { rgb(0x181511) };
+    let bg = if active { rgb(0xf3f1ed) } else { rgb(0xffffff) };
     div()
         .px(px(10.))
         .py(px(8.))
@@ -872,11 +883,21 @@ fn nav_button(
 }
 
 fn action_button(label: &'static str, filled: bool) -> gpui::Div {
-    let mut el = div().px(px(12.)).py(px(7.)).rounded(px(999.)).cursor_pointer().child(SharedString::from(label));
+    let mut el = div().px(px(14.)).py(px(8.)).rounded(px(999.)).cursor_pointer().child(SharedString::from(label));
     if filled {
-        el = el.bg(rgb(0xe4a15c)).text_color(rgb(0x1a1208));
+        el = el.bg(rgb(0x1c1b18)).text_color(rgb(0xf7f6f3));
     } else {
-        el = el.border_1().border_color(rgb(0x5c5348)).text_color(rgb(0xf4efe6));
+        el = el.border_1().border_color(rgb(0xd9d3cb)).text_color(rgb(0x1c1b18));
+    }
+    el
+}
+
+fn overlay_button(label: &'static str, filled: bool) -> gpui::Div {
+    let mut el = div().px(px(14.)).py(px(8.)).rounded(px(999.)).cursor_pointer().child(SharedString::from(label));
+    if filled {
+        el = el.bg(rgb(0xf7f6f3)).text_color(rgb(0x1c1b18));
+    } else {
+        el = el.border_1().border_color(rgb(0x8d897f)).text_color(rgb(0xf7f6f3));
     }
     el
 }

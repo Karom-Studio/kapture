@@ -15,6 +15,7 @@ mod screen;
 mod session;
 mod settings;
 mod ui;
+mod veil;
 
 fn main() {
     ui::run();

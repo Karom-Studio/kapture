@@ -18,7 +18,7 @@ Le moteur est séparé de l'interface : `xcap` parle aux API natives (X11, porta
 
 ## Cette version
 
-- Photo de l'écran, d'une fenêtre ou d'une zone. PNG, presse-papiers et dossier.
+- Photo de l'écran, d'une fenêtre ou d'une zone. La fenêtre de Kapture est masquée le temps de la prise. PNG, presse-papiers et dossier.
 - Film de l'écran, d'une fenêtre ou d'une zone. Pause, reprise, stop. MP4 local. Micro, son du système et bulle caméra quand le matériel existe.
 - Icône native dans la barre de statut.
 - Raccourcis globaux.

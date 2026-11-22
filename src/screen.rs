@@ -45,7 +45,7 @@ pub fn capture_monitor(locale: &str, monitor_id: Option<&str>) -> Result<(Monito
     let monitors = Monitor::all().map_err(|e| map_xcap(locale, e))?;
     let monitor = pick_monitor(locale, &monitors, monitor_id)?;
     let info = read_monitor(locale, monitor)?;
-    let image = monitor.capture_image().map_err(|e| map_xcap(locale, e))?;
+    let image = crate::veil::without_self(|| monitor.capture_image()).map_err(|e| map_xcap(locale, e))?;
     Ok((info, image))
 }
 
@@ -73,7 +73,7 @@ pub fn capture_window(locale: &str, window_id: &str) -> Result<(WindowInfo, Rgba
         return Err(fail(locale, "WINDOW_MINIMIZED"));
     }
     let info = read_window(window).map_err(|e| map_xcap(locale, e))?;
-    let image = window.capture_image().map_err(|e| map_xcap(locale, e))?;
+    let image = crate::veil::without_self(|| window.capture_image()).map_err(|e| map_xcap(locale, e))?;
     Ok((info, image))
 }
 
