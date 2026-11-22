@@ -1007,7 +1007,7 @@ fn texts(locale: &str) -> Texts {
         Texts {
             name: "Kapture",
             kicker: "Kapture Desktop",
-            byline: "An open-source project by Karom Studio.",
+            byline: "Open source for PC, by Karom Studio.",
             home_title: "What do you want to keep?",
             home: "Home",
             library: "Library",
@@ -1072,7 +1072,7 @@ fn texts(locale: &str) -> Texts {
         Texts {
             name: "Kapture",
             kicker: "Kapture Desktop",
-            byline: "Un projet open source de Karom Studio.",
+            byline: "Open source pour PC, par Karom Studio.",
             home_title: "Que voulez-vous garder ?",
             home: "Accueil",
             library: "Bibliothèque",

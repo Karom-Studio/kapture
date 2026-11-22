@@ -2,7 +2,7 @@
 
 Kapture — An open-source project by Karom Studio.
 
-Kapture Desktop capture l'écran et enregistre un film, en local, sur Windows, macOS et Linux. L'interface est native, dessinée par [GPUI](https://gpui.rs), le cadre GPU de Zed. Il n'y a pas de webview.
+Kapture Desktop est un logiciel open source pour PC : Windows, macOS et Linux. Il capture l'écran et enregistre un film, en local. L'interface est native, dessinée par [GPUI](https://gpui.rs), le cadre GPU de Zed.
 
 | | |
 | --- | --- |
