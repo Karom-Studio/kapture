@@ -82,6 +82,46 @@ pub enum Corner {
     BottomRight,
 }
 
+pub struct PipPreset {
+    pub key: &'static str,
+    pub enabled: bool,
+    pub size: WebcamSize,
+    pub corner: Corner,
+}
+
+pub fn pip_presets() -> &'static [PipPreset] {
+    &[
+        PipPreset { key: "off", enabled: false, size: WebcamSize::Medium, corner: Corner::BottomRight },
+        PipPreset { key: "s-br", enabled: true, size: WebcamSize::Small, corner: Corner::BottomRight },
+        PipPreset { key: "m-br", enabled: true, size: WebcamSize::Medium, corner: Corner::BottomRight },
+        PipPreset { key: "l-br", enabled: true, size: WebcamSize::Large, corner: Corner::BottomRight },
+        PipPreset { key: "s-tl", enabled: true, size: WebcamSize::Small, corner: Corner::TopLeft },
+        PipPreset { key: "m-tl", enabled: true, size: WebcamSize::Medium, corner: Corner::TopLeft },
+        PipPreset { key: "l-bl", enabled: true, size: WebcamSize::Large, corner: Corner::BottomLeft },
+    ]
+}
+
+impl Settings {
+    pub fn pip_key(&self) -> &'static str {
+        pip_presets()
+            .iter()
+            .find(|preset| {
+                preset.enabled == self.webcam_enabled
+                    && (!preset.enabled || (preset.size == self.webcam_size && preset.corner == self.webcam_position))
+            })
+            .map(|preset| preset.key)
+            .unwrap_or("off")
+    }
+
+    pub fn apply_pip(&mut self, key: &str) {
+        if let Some(preset) = pip_presets().iter().find(|preset| preset.key == key) {
+            self.webcam_enabled = preset.enabled;
+            self.webcam_size = preset.size;
+            self.webcam_position = preset.corner;
+        }
+    }
+}
+
 impl Corner {
     pub fn overlay_xy(self, margin: i32) -> (String, String) {
         let m = margin.to_string();
@@ -277,6 +317,22 @@ mod tests {
     }
 
     #[test]
+    fn pip_presets_apply_size_and_corner() {
+        let mut settings = Settings::default();
+        assert_eq!(settings.pip_key(), "off");
+        settings.apply_pip("l-br");
+        assert!(settings.webcam_enabled);
+        assert_eq!(settings.webcam_size, WebcamSize::Large);
+        assert_eq!(settings.webcam_position, Corner::BottomRight);
+        assert_eq!(settings.pip_key(), "l-br");
+        settings.apply_pip("s-tl");
+        assert_eq!(settings.webcam_size, WebcamSize::Small);
+        assert_eq!(settings.webcam_position, Corner::TopLeft);
+        settings.apply_pip("off");
+        assert!(!settings.webcam_enabled);
+        assert_eq!(settings.pip_key(), "off");
+    }
+
     fn corners_emit_overlay_expressions() {
         assert_eq!(Corner::BottomRight.overlay_xy(28), ("W-w-28".into(), "H-h-28".into()));
         assert_eq!(Corner::TopLeft.overlay_xy(12), ("12".into(), "12".into()));

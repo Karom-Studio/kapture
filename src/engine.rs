@@ -272,6 +272,55 @@ impl Engine {
         if self.lock().session.is_some() { self.stop() } else { self.start_screen(None) }
     }
 
+    pub fn store_still(&self, image: RgbaImage) -> Cmd<ActionResult> {
+        self.persist_image(image, CaptureSource::image("edit"), false)
+    }
+
+    pub fn trim_video(&self, source: &Path, start_ms: u64, end_ms: u64, caption: &str) -> Cmd<ActionResult> {
+        let model = self.lock();
+        let locale = model.settings.locale.clone();
+        let duration = encode::probe_duration_ms(source).unwrap_or(0);
+        let Some((start_ms, end_ms)) = media::trim_bounds(duration, start_ms, end_ms) else {
+            return Err(fail(&locale, "TRIM_RANGE"));
+        };
+        let bin = encode::find_tool("ffmpeg").ok_or_else(|| fail(&locale, "FFMPEG_MISSING"))?;
+        let dir = model.settings.output_dir_path();
+        drop(model);
+        fs::create_dir_all(&dir).map_err(|e| CommandError::new("IO", e.to_string()))?;
+        let path = next_available(&dir, &capture_filename(&library::stamp_now(), "mp4"));
+        media::trim_copy(&bin, source, &path, start_ms, end_ms, caption).map_err(|err| {
+            if err == "font" { fail(&locale, "ANNOTATE_FONT") } else { fail(&locale, "TRIM_FAILED") }
+        })?;
+        let mut model = self.lock();
+        let id = library::new_id();
+        let _ = media::video_thumb(&bin, &path, &library::thumb_path(&model.paths.thumbs_dir, &id));
+        let (width, height) = encode::probe_video_size(&path).unwrap_or((0, 0));
+        let record = CaptureRecord {
+            id,
+            kind: "recording".into(),
+            filename: path.file_name().and_then(|n| n.to_str()).unwrap_or("film.mp4").into(),
+            path: path.display().to_string(),
+            created_at: chrono::Local::now().to_rfc3339(),
+            width,
+            height,
+            duration_ms: Some(end_ms.saturating_sub(start_ms)),
+            bytes: fs::metadata(&path).map(|m| m.len()).unwrap_or(0),
+            source: CaptureSource::image("edit"),
+        };
+        let dto = dto_for(&model, &record);
+        model.library.insert(record);
+        let _ = model.library.save(&model.paths.library_file);
+        Ok(ActionResult {
+            mode: Some("browse".into()),
+            notice: Some(notice_code(&locale, "success", "EDIT_SAVED")),
+            warnings: Vec::new(),
+            preview: None,
+            recording: status_of(&model),
+            item: Some(dto),
+            removed_id: None,
+        })
+    }
+
     pub fn send_capture(&self, id: &str) -> Cmd<String> {
         let model = self.lock();
         let locale = model.settings.locale.clone();

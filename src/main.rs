@@ -1,3 +1,4 @@
+mod annotate;
 mod copy;
 mod devices;
 mod dto;

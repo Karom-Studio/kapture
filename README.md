@@ -18,21 +18,20 @@ Le moteur est séparé de l'interface : `xcap` parle aux API natives (X11, porta
 
 ## Cette version
 
-- Photo de l'écran, d'une fenêtre ou d'une zone. La fenêtre de Kapture est masquée le temps de la prise. PNG, presse-papiers et dossier.
-- Film de l'écran, d'une fenêtre ou d'une zone. Pause, reprise, stop. MP4 local. Micro, son du système et bulle caméra quand le matériel existe.
+- Photo de l'écran, d'une fenêtre ou d'une zone. La fenêtre de Kapture est masquée le temps de la prise. PNG, presse-papiers et dossier. Éditer ajoute un trait, une flèche, un cadre, une coche, une croix, une étoile, du texte, ou un recadrage.
+- Film de l'écran, d'une fenêtre ou d'une zone. Pause, reprise, stop. MP4 local. Éditer coupe le début et la fin, et peut incruster une ligne de texte. Micro et son du système quand le matériel existe. La webcam en incrustation se choisit avant l'enregistrement : sans, ou petite, moyenne et grande, dans un coin.
 - Icône native dans la barre de statut.
 - Raccourcis globaux.
 - Bibliothèque : mosaïque avec les vignettes, ou liste avec l'aperçu au survol. Une photo s'ouvre dans Kapture. Un film s'ouvre dans un lecteur vidéo.
 - Envoi direct vers une autre machine Kapture, ou vers un serveur que l'on héberge soi-même.
-- Réglages : dossier, hauteur jusqu'à la 4K sans agrandir, cadence, qualité, curseur, micro, son, bulle, adresse et jeton de partage.
+- Réglages : dossier, hauteur jusqu'à la 4K sans agrandir, cadence, qualité, curseur, micro, son, presets webcam, adresse et jeton de partage.
 - Français par défaut, anglais au bouton de langue.
 
 ## Plus tard
 
-- Annotation : flèches, texte, floutage.
-- Recadrage et édition rapide.
+- Floutage.
 - Export JPEG et WebP, en plus du PNG.
-- Montage : couper, zoomer sur les clics.
+- Montage sur une timeline : couper au milieu, zoomer sur les clics.
 
 Les fichiers restent sur le disque. `library.json` décrit leur source pour ces étapes.
 

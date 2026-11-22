@@ -9,7 +9,7 @@ use global_hotkey::HotKeyState;
 use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager};
 use gpui::{
     img, px, rgb, size, App, Bounds, Context, ImageSource, IntoElement, MouseButton,
-    FocusHandle, KeyDownEvent, MouseDownEvent, MouseMoveEvent, Pixels, Point, Render, RenderImage, SharedString, Window,
+    FocusHandle, KeyDownEvent, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, Render, RenderImage, SharedString, Window,
     WindowBounds, WindowOptions, div, prelude::*,
 };
 use base64::Engine as _;
@@ -20,11 +20,11 @@ use crate::copy;
 use crate::dto::{ActionResult, Bootstrap, CaptureDto, Notice, RecordingStatus};
 use crate::engine::Engine;
 use crate::error::CommandError;
-use crate::settings::{Corner, Hotkeys, Quality, Settings, VideoHeight, WebcamSize};
+use crate::settings::{Hotkeys, Quality, VideoHeight};
 
 enum Page { Home, Library, Settings }
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Mode { Browse, Preparing, Region, Recording, Viewer }
+enum Mode { Browse, Preparing, Region, Recording, Viewer, EditPhoto, EditFilm }
 #[derive(Clone, Copy)]
 enum HotAct { ShotScreen, ShotWindow, ShotRegion, RecordToggle, RecordPause }
 enum Job {
@@ -35,6 +35,7 @@ enum Job {
     Folder(Option<std::path::PathBuf>),
     Command(HotAct),
     View(Result<(String, RgbaImage), String>),
+    EditFilm { path: String, name: String, duration_ms: u64 },
 }
 
 pub fn run() {
@@ -79,6 +80,18 @@ struct Kapture {
     token_focus: FocusHandle,
     hosting: bool,
     host_label: String,
+    source_image: Option<RgbaImage>,
+    film_path: String,
+    film_name: String,
+    film_start: u64,
+    film_end: u64,
+    film_duration: u64,
+    marks: Vec<crate::annotate::Mark>,
+    tool: u8,
+    inking: bool,
+    pending_edit: bool,
+    draft: String,
+    edit_focus: FocusHandle,
     drag: Option<(Point<Pixels>, Point<Pixels>)>,
     picker: Option<(String, Vec<crate::dto::WindowDto>)>,
     manager: Option<GlobalHotKeyManager>,
@@ -113,6 +126,18 @@ impl Kapture {
             token_focus: cx.focus_handle(),
             hosting: false,
             host_label: String::new(),
+            source_image: None,
+            film_path: String::new(),
+            film_name: String::new(),
+            film_start: 0,
+            film_end: 0,
+            film_duration: 0,
+            marks: Vec::new(),
+            tool: 0,
+            inking: false,
+            pending_edit: false,
+            draft: String::new(),
+            edit_focus: cx.focus_handle(),
             drag: None,
             picker: None,
             manager: GlobalHotKeyManager::new().ok(),
@@ -193,13 +218,28 @@ impl Kapture {
                     self.persist_settings(cx);
                 }
                 Job::Folder(None) => {}
+                Job::EditFilm { path, name, duration_ms } => {
+                    self.film_path = path;
+                    self.film_name = name;
+                    self.film_duration = duration_ms;
+                    self.film_start = 0;
+                    self.film_end = duration_ms;
+                    self.draft.clear();
+                    self.mode = Mode::EditFilm;
+                    self.page = Page::Library;
+                }
                 Job::View(result) => match result {
                     Ok((name, image)) => {
                         self.preview_w = image.width();
                         self.preview_h = image.height();
                         self.preview = Some(rgba_image(&image));
+                        self.source_image = Some(image);
                         self.viewer_name = name;
-                        self.mode = Mode::Viewer;
+                        self.marks.clear();
+                        self.draft.clear();
+                        self.inking = false;
+                        self.mode = if self.pending_edit { Mode::EditPhoto } else { Mode::Viewer };
+                        self.pending_edit = false;
                         self.page = Page::Library;
                     }
                     Err(message) => self.fail_text(message),
@@ -503,6 +543,8 @@ impl Kapture {
                     .child(self.card(t.window, t.window_body, cx, false))
                     .child(self.card(t.region, t.region_body, cx, false)),
             )
+            .child(div().text_size(px(13.)).text_color(rgb(0x8a847c)).child(SharedString::from(t.pip)))
+            .child(self.pip_row(t, cx))
             .child(div().mt(px(12.)).text_size(px(13.)).text_color(rgb(0x8a847c)).child(SharedString::from(t.devices)))
             .child(self.device_line(&t.screen_dev, &self.boot.report.screen.state))
             .child(self.device_line(&t.mic_dev, &self.boot.report.microphone.state))
@@ -681,6 +723,86 @@ impl Kapture {
         self.thumbs.get(id).cloned()
     }
 
+    fn edit_library_item(&mut self, path: String, filename: String, film: bool, cx: &mut Context<Self>) {
+        if film {
+            self.draft.clear();
+            self.mode = Mode::Preparing;
+            let tx = self.tx.clone();
+            thread::spawn(move || {
+                let duration_ms = crate::encode::probe_duration_ms(std::path::Path::new(&path)).unwrap_or(0);
+                let _ = tx.send(Job::EditFilm { path, name: filename, duration_ms });
+            });
+            cx.notify();
+            return;
+        }
+        self.pending_edit = true;
+        self.mode = Mode::Preparing;
+        let tx = self.tx.clone();
+        thread::spawn(move || {
+            let loaded = image::open(&path).map(|img| (filename, img.to_rgba8())).map_err(|err| err.to_string());
+            let _ = tx.send(Job::View(loaded));
+        });
+        cx.notify();
+    }
+
+    fn image_at(&self, window: &Window, point: Point<Pixels>) -> (i32, i32) {
+        let (w, h) = self.source_image.as_ref().map(|image| (image.width(), image.height())).unwrap_or((1, 1));
+        map_point(point, window.viewport_size(), w, h)
+    }
+
+    fn rebake(&mut self) {
+        let Some(base) = self.source_image.clone() else { return };
+        let mut image = base;
+        crate::annotate::paint(&mut image, &self.marks);
+        self.preview = Some(rgba_image(&image));
+    }
+
+    fn finish_crop(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(base) = self.source_image.clone() else { return };
+        let mut image = base;
+        crate::annotate::paint(&mut image, &self.marks);
+        if self.tool == 4 {
+            let Some((a, b)) = self.drag else {
+                self.notice = Some(note(&self.boot.settings.locale, "error", "REGION_TOO_SMALL"));
+                cx.notify();
+                return;
+            };
+            let (x0, y0) = self.image_at(window, a);
+            let (x1, y1) = self.image_at(window, b);
+            let Some(rect) = crate::geom::clamp_rect(x0, y0, x1 - x0, y1 - y0, image.width(), image.height()) else {
+                self.notice = Some(note(&self.boot.settings.locale, "error", "REGION_TOO_SMALL"));
+                cx.notify();
+                return;
+            };
+            image = image::imageops::crop_imm(&image, rect.x, rect.y, rect.width, rect.height).to_image();
+        }
+        self.mode = Mode::Preparing;
+        self.drag = None;
+        self.marks.clear();
+        let engine = Arc::clone(&self.engine);
+        let tx = self.tx.clone();
+        thread::spawn(move || {
+            let result = engine.store_still(image).map_err(|e| e.message);
+            let _ = tx.send(Job::Done(result));
+        });
+        cx.notify();
+    }
+
+    fn save_trim(&mut self, cx: &mut Context<Self>) {
+        let path = self.film_path.clone();
+        let start = self.film_start;
+        let end = self.film_end;
+        let caption = self.draft.clone();
+        self.mode = Mode::Preparing;
+        let engine = Arc::clone(&self.engine);
+        let tx = self.tx.clone();
+        thread::spawn(move || {
+            let result = engine.trim_video(std::path::Path::new(&path), start, end, &caption).map_err(|e| e.message);
+            let _ = tx.send(Job::Done(result));
+        });
+        cx.notify();
+    }
+
     fn open_library_item(&mut self, path: String, filename: String, film: bool, cx: &mut Context<Self>) {
         if film {
             if let Err(err) = self.engine.open_film(&path) {
@@ -739,6 +861,12 @@ impl Kapture {
                         let filename = item.record.filename.clone();
                         let film = item.record.kind == "recording";
                         move |this, _, _, cx| this.open_library_item(path.clone(), filename.clone(), film, cx)
+                    })))
+                    .child(small_button(t.edit).on_mouse_up(MouseButton::Left, cx.listener({
+                        let path = item.record.path.clone();
+                        let filename = item.record.filename.clone();
+                        let film = item.record.kind == "recording";
+                        move |this, _, _, cx| this.edit_library_item(path.clone(), filename.clone(), film, cx)
                     })))
                     .child(small_button(t.send).on_mouse_up(MouseButton::Left, cx.listener({
                         let id = item.record.id.clone();
@@ -809,6 +937,12 @@ impl Kapture {
                 let filename = item.record.filename.clone();
                 let film = item.record.kind == "recording";
                 move |this, _, _, cx| this.open_library_item(path.clone(), filename.clone(), film, cx)
+            })))
+            .child(small_button(t.edit).on_mouse_up(MouseButton::Left, cx.listener({
+                let path = item.record.path.clone();
+                let filename = item.record.filename.clone();
+                let film = item.record.kind == "recording";
+                move |this, _, _, cx| this.edit_library_item(path.clone(), filename.clone(), film, cx)
             })))
             .child(small_button(t.send).on_mouse_up(MouseButton::Left, cx.listener({
                 let id = id.clone();
@@ -890,22 +1024,8 @@ impl Kapture {
             .child(toggle_row(t.cursor, s.show_cursor, cx, |this| this.boot.settings.show_cursor ^= true))
             .child(toggle_row(t.mic, s.capture_microphone, cx, |this| this.boot.settings.capture_microphone ^= true))
             .child(toggle_row(t.system, s.capture_system_audio, cx, |this| this.boot.settings.capture_system_audio ^= true))
-            .child(toggle_row(t.camera, s.webcam_enabled, cx, |this| this.boot.settings.webcam_enabled ^= true))
-            .child(self.choice_row(t.bubble, &[
-                (t.small, matches!(s.webcam_size, WebcamSize::Small)),
-                (t.medium, matches!(s.webcam_size, WebcamSize::Medium)),
-                (t.large, matches!(s.webcam_size, WebcamSize::Large)),
-            ], cx, |this, index| {
-                this.boot.settings.webcam_size = [WebcamSize::Small, WebcamSize::Medium, WebcamSize::Large][index];
-            }))
-            .child(self.choice_row(t.corner, &[
-                (t.top_left, matches!(s.webcam_position, Corner::TopLeft)),
-                (t.top_right, matches!(s.webcam_position, Corner::TopRight)),
-                (t.bottom_left, matches!(s.webcam_position, Corner::BottomLeft)),
-                (t.bottom_right, matches!(s.webcam_position, Corner::BottomRight)),
-            ], cx, |this, index| {
-                this.boot.settings.webcam_position = [Corner::TopLeft, Corner::TopRight, Corner::BottomLeft, Corner::BottomRight][index];
-            }))
+            .child(div().text_size(px(13.)).text_color(rgb(0x8a847c)).child(SharedString::from(t.pip)))
+            .child(self.pip_row(t, cx))
             .child(div().text_color(rgb(0x8a847c)).child(SharedString::from(shortcut_line(&s.hotkeys))))
             .child(div().mt(px(8.)).text_size(px(18.)).child(SharedString::from(t.share)))
             .child(self.choice_row(t.share, &[
@@ -943,6 +1063,25 @@ impl Kapture {
             })))
     }
 
+    fn pip_row(&self, t: &Texts, cx: &mut Context<Self>) -> impl IntoElement {
+        let _ = t;
+        let english = self.boot.settings.locale == "en";
+        let current = self.boot.settings.pip_key();
+        let mut row = div().flex().flex_wrap().gap(px(8.));
+        for preset in crate::settings::pip_presets() {
+            let key = preset.key;
+            let on = current == key;
+            row = row.child(action_button(pip_name(key, english), on).on_mouse_up(
+                MouseButton::Left,
+                cx.listener(move |this, _, _, cx| {
+                    this.boot.settings.apply_pip(key);
+                    this.persist_settings(cx);
+                }),
+            ));
+        }
+        row
+    }
+
     fn share_box(
         &self,
         label: &'static str,
@@ -975,6 +1114,12 @@ impl Kapture {
                         }
                     }))
                     .on_key_down(cx.listener(move |this, ev: &KeyDownEvent, _, cx| {
+                        if field == 3 {
+                            if edit_text(&mut this.draft, ev) {
+                                cx.notify();
+                            }
+                            return;
+                        }
                         let slot = match field {
                             0 => &mut this.boot.settings.peer_url,
                             1 => &mut this.boot.settings.server_url,
@@ -1075,6 +1220,196 @@ impl Kapture {
             )
     }
 
+    fn crop_view(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = texts(&self.boot.settings.locale);
+        let selection = self.drag.map(|(a, b)| {
+            let ax = f32::from(a.x);
+            let ay = f32::from(a.y);
+            let bx = f32::from(b.x);
+            let by = f32::from(b.y);
+            div()
+                .absolute()
+                .left(px(ax.min(bx)))
+                .top(px(ay.min(by)))
+                .w(px((ax - bx).abs().max(1.)))
+                .h(px((ay - by).abs().max(1.)))
+                .border_2()
+                .border_color(rgb(0x1c1b18))
+        });
+        div()
+            .size_full()
+            .relative()
+            .bg(rgb(0x111110))
+            .id("annotate")
+            .track_focus(&self.edit_focus)
+            .on_mouse_down(MouseButton::Left, cx.listener(|this, ev: &MouseDownEvent, window, cx| {
+                let point = this.image_at(window, ev.position);
+                match this.tool {
+                    0 => {
+                        this.inking = true;
+                        this.marks.push(crate::annotate::Mark::Stroke(vec![point]));
+                    }
+                    3 => {
+                        if !this.draft.trim().is_empty() {
+                            this.marks.push(crate::annotate::Mark::Text { at: point, text: this.draft.clone() });
+                            this.rebake();
+                        }
+                    }
+                    5 | 6 | 7 => {
+                        this.marks.push(crate::annotate::Mark::Icon { at: point, kind: this.tool - 5 });
+                        this.rebake();
+                    }
+                    _ => this.drag = Some((ev.position, ev.position)),
+                }
+                cx.notify();
+            }))
+            .on_mouse_move(cx.listener(|this, ev: &MouseMoveEvent, window, cx| {
+                if this.inking {
+                    let point = this.image_at(window, ev.position);
+                    if let Some(crate::annotate::Mark::Stroke(points)) = this.marks.last_mut() {
+                        points.push(point);
+                        if points.len() % 6 == 0 {
+                            this.rebake();
+                        }
+                    }
+                } else if let Some((start, _)) = this.drag {
+                    this.drag = Some((start, ev.position));
+                }
+                cx.notify();
+            }))
+            .on_mouse_up(MouseButton::Left, cx.listener(|this, ev: &MouseUpEvent, window, cx| {
+                if this.inking {
+                    this.inking = false;
+                    this.rebake();
+                } else if matches!(this.tool, 1 | 2) {
+                    if let Some((start, _)) = this.drag.take() {
+                        let a = this.image_at(window, start);
+                        let b = this.image_at(window, ev.position);
+                        this.marks.push(if this.tool == 1 {
+                            crate::annotate::Mark::Arrow { a, b }
+                        } else {
+                            crate::annotate::Mark::Rect { a, b }
+                        });
+                        this.rebake();
+                    }
+                }
+                cx.notify();
+            }))
+            .on_key_down(cx.listener(|this, ev: &KeyDownEvent, _, cx| {
+                if this.tool == 3 && edit_text(&mut this.draft, ev) {
+                    cx.notify();
+                }
+            }))
+            .when_some(self.preview.clone(), |this, image| {
+                this.child(img(ImageSource::Render(image)).size_full().object_fit(gpui::ObjectFit::Fill))
+            })
+            .children(selection)
+            .child(
+                div()
+                    .absolute()
+                    .top(px(16.))
+                    .left(px(16.))
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap(px(8.))
+                    .px(px(12.))
+                    .py(px(8.))
+                    .rounded(px(14.))
+                    .bg(rgb(0x1c1b18))
+                    .on_mouse_down(MouseButton::Left, cx.listener(|_, _, _, cx| cx.stop_propagation()))
+                    .on_mouse_move(cx.listener(|_, _, _, cx| cx.stop_propagation()))
+                    .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                        if this.inking {
+                            this.inking = false;
+                            this.rebake();
+                        }
+                        cx.stop_propagation();
+                    }))
+                    .child(tool_button(t.pen, self.tool == 0, 0, cx))
+                    .child(tool_button(t.arrow, self.tool == 1, 1, cx))
+                    .child(tool_button(t.frame, self.tool == 2, 2, cx))
+                    .child(tool_button(if self.boot.settings.locale == "en" { "Check" } else { "Coche" }, self.tool == 5, 5, cx))
+                    .child(tool_button(if self.boot.settings.locale == "en" { "Cross" } else { "Croix" }, self.tool == 6, 6, cx))
+                    .child(tool_button(if self.boot.settings.locale == "en" { "Star" } else { "Étoile" }, self.tool == 7, 7, cx))
+                    .child(tool_button(t.letter, self.tool == 3, 3, cx))
+                    .child(tool_button(t.crop, self.tool == 4, 4, cx))
+                    .child(div().text_color(rgb(0xf7f6f3)).child(SharedString::from(
+                        if self.tool == 3 && !self.draft.is_empty() {
+                            self.draft.clone()
+                        } else {
+                            tool_hint(self.tool, self.boot.settings.locale == "en").to_string()
+                        },
+                    )))
+                    .child(overlay_button(t.save, true).on_mouse_up(MouseButton::Left, cx.listener(|this, _, window, cx| {
+                        this.finish_crop(window, cx);
+                    })))
+                    .child(overlay_button(t.cancel, false).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                        this.drag = None;
+                        this.marks.clear();
+                        this.mode = Mode::Viewer;
+                        cx.notify();
+                    }))),
+            )
+    }
+
+    fn trim_view(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = texts(&self.boot.settings.locale);
+        let start = format_ms(self.film_start);
+        let end = format_ms(self.film_end);
+        let duration = format_ms(self.film_duration);
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .gap(px(18.))
+            .bg(rgb(0xf5f4f1))
+            .text_color(rgb(0x1c1b18))
+            .child(div().text_size(px(13.)).text_color(rgb(0x8a847c)).child(SharedString::from(self.film_name.clone())))
+            .child(div().text_size(px(28.)).child(SharedString::from(format!("{start}  –  {end}"))))
+            .child(div().text_size(px(13.)).text_color(rgb(0x8a847c)).child(SharedString::from(format!("{} {duration}", t.duration))))
+            .child(self.share_box(t.title, &self.draft, &self.edit_focus, 3, cx))
+            .child(
+                div()
+                    .flex()
+                    .gap(px(8.))
+                    .child(action_button(t.start_minus, false).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                        this.film_start = this.film_start.saturating_sub(1000);
+                        cx.notify();
+                    })))
+                    .child(action_button(t.start_plus, false).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                        if this.film_start + 1500 < this.film_end {
+                            this.film_start += 1000;
+                        }
+                        cx.notify();
+                    })))
+                    .child(action_button(t.end_minus, false).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                        if this.film_end > this.film_start + 1500 {
+                            this.film_end -= 1000;
+                        }
+                        cx.notify();
+                    })))
+                    .child(action_button(t.end_plus, false).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                        this.film_end = (this.film_end + 1000).min(this.film_duration);
+                        cx.notify();
+                    }))),
+            )
+            .child(
+                div()
+                    .flex()
+                    .gap(px(8.))
+                    .child(action_button(t.save, true).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                        this.save_trim(cx);
+                    })))
+                    .child(action_button(t.cancel, false).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                        this.mode = Mode::Browse;
+                        cx.notify();
+                    }))),
+            )
+    }
+
     fn viewer(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let t = texts(&self.boot.settings.locale);
         div()
@@ -1097,8 +1432,19 @@ impl Kapture {
                     .rounded(px(14.))
                     .bg(rgb(0x1c1b18))
                     .child(div().text_color(rgb(0xf7f6f3)).child(SharedString::from(self.viewer_name.clone())))
+                    .child(overlay_button(t.edit, false).on_mouse_up(MouseButton::Left, cx.listener(|this, _, window, cx| {
+                        this.drag = None;
+                        this.marks.clear();
+                        this.draft.clear();
+                        this.tool = 0;
+                        this.inking = false;
+                        this.mode = Mode::EditPhoto;
+                        window.focus(&this.edit_focus);
+                        cx.notify();
+                    })))
                     .child(overlay_button(t.close, true).on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
                         this.preview = None;
+                        this.source_image = None;
                         this.mode = Mode::Browse;
                         cx.notify();
                     }))),
@@ -1146,6 +1492,8 @@ impl Render for Kapture {
             Mode::Region => self.region_view(cx).into_any_element(),
             Mode::Recording => self.record_bar(cx).into_any_element(),
             Mode::Viewer => self.viewer(cx).into_any_element(),
+            Mode::EditPhoto => self.crop_view(cx).into_any_element(),
+            Mode::EditFilm => self.trim_view(cx).into_any_element(),
             Mode::Browse => self.render_shell(cx).into_any_element(),
         }
     }
@@ -1208,6 +1556,55 @@ fn action_button(label: &'static str, filled: bool) -> gpui::Div {
     el
 }
 
+fn tool_button(label: &'static str, on: bool, tool: u8, cx: &mut Context<Kapture>) -> gpui::Div {
+    overlay_button(label, on).on_mouse_up(MouseButton::Left, cx.listener(move |this, _, window, cx| {
+        this.tool = tool;
+        this.drag = None;
+        this.inking = false;
+        if tool == 3 {
+            window.focus(&this.edit_focus);
+        }
+        cx.stop_propagation();
+        cx.notify();
+    }))
+}
+
+fn tool_hint(tool: u8, english: bool) -> &'static str {
+    match (tool, english) {
+        (0, false) => "Tracez sur la photo.",
+        (0, true) => "Draw on the photo.",
+        (1, false) => "Tirez une flèche.",
+        (1, true) => "Drag an arrow.",
+        (2, false) => "Tirez un cadre.",
+        (2, true) => "Drag a box.",
+        (3, false) => "Tapez, puis cliquez pour poser le texte.",
+        (3, true) => "Type, then click to place the text.",
+        (4, false) => "Glissez pour recadrer, puis enregistrez.",
+        (4, true) => "Drag to crop, then save.",
+        (_, false) => "Cliquez pour poser l'icône.",
+        (_, true) => "Click to place the icon.",
+    }
+}
+
+fn pip_name(key: &str, english: bool) -> &'static str {
+    match (key, english) {
+        ("off", false) => "Sans",
+        ("off", true) => "Off",
+        ("s-br", false) => "S · bas",
+        ("s-br", true) => "S · bottom",
+        ("m-br", false) => "M · bas",
+        ("m-br", true) => "M · bottom",
+        ("l-br", false) => "L · bas",
+        ("l-br", true) => "L · bottom",
+        ("s-tl", false) => "S · haut",
+        ("s-tl", true) => "S · top",
+        ("m-tl", false) => "M · haut",
+        ("m-tl", true) => "M · top",
+        ("l-bl", false) => "L · coin",
+        _ => "L · corner",
+    }
+}
+
 fn overlay_button(label: &'static str, filled: bool) -> gpui::Div {
     let mut el = div().px(px(14.)).py(px(8.)).rounded(px(999.)).cursor_pointer().child(SharedString::from(label));
     if filled {
@@ -1251,7 +1648,12 @@ fn map_point(point: Point<Pixels>, viewport: gpui::Size<Pixels>, w: u32, h: u32)
 }
 
 fn rgba_image(image: &RgbaImage) -> Arc<RenderImage> {
-    Arc::new(RenderImage::new(smallvec![image::Frame::new(image.clone())]))
+    // GPUI uploads frames as BGRA. The file on disk stays RGBA.
+    let mut frame = image.clone();
+    for pixel in frame.chunks_exact_mut(4) {
+        pixel.swap(0, 2);
+    }
+    Arc::new(RenderImage::new(smallvec![image::Frame::new(frame)]))
 }
 
 fn format_ms(ms: u64) -> String {
@@ -1346,6 +1748,21 @@ struct Texts {
     drag_hint: &'static str,
     cancel: &'static str,
     close: &'static str,
+    edit: &'static str,
+    pen: &'static str,
+    arrow: &'static str,
+    frame: &'static str,
+    letter: &'static str,
+    crop: &'static str,
+    pip: &'static str,
+    title: &'static str,
+    crop_hint: &'static str,
+    save: &'static str,
+    duration: &'static str,
+    start_minus: &'static str,
+    start_plus: &'static str,
+    end_minus: &'static str,
+    end_plus: &'static str,
     pause: &'static str,
     resume: &'static str,
     stop: &'static str,
@@ -1420,12 +1837,27 @@ fn texts(locale: &str) -> Texts {
             bottom_left: "BL",
             bottom_right: "BR",
             later: "Later",
-            later_body: "Arrows, text, blur, a quick crop, JPEG, WebP and sharing come next. Files stay on disk.",
+            later_body: "Blur, JPEG and WebP come next. Files stay on disk.",
             lang: "English / Français",
             preparing: "One moment…",
             drag_hint: "Drag to frame the area.",
             cancel: "Cancel",
             close: "Close",
+            edit: "Edit",
+            pen: "Pen",
+            arrow: "Arrow",
+            frame: "Box",
+            letter: "Text",
+            crop: "Crop",
+            pip: "Webcam",
+            title: "Title on the film",
+            crop_hint: "Drag to crop.",
+            save: "Save",
+            duration: "Length",
+            start_minus: "Start −",
+            start_plus: "Start +",
+            end_minus: "End −",
+            end_plus: "End +",
             pause: "Pause",
             resume: "Resume",
             stop: "Stop",
@@ -1498,12 +1930,27 @@ fn texts(locale: &str) -> Texts {
             bottom_left: "BG",
             bottom_right: "BD",
             later: "Plus tard",
-            later_body: "Flèches, texte, flou, recadrage, JPEG, WebP et partage viendront ensuite. Les fichiers restent sur le disque.",
+            later_body: "Le flou, le JPEG et le WebP viendront ensuite. Les fichiers restent sur le disque.",
             lang: "Français / English",
             preparing: "Un instant…",
             drag_hint: "Glissez pour encadrer la zone.",
             cancel: "Annuler",
             close: "Fermer",
+            edit: "Éditer",
+            pen: "Trait",
+            arrow: "Flèche",
+            frame: "Cadre",
+            letter: "Texte",
+            crop: "Recadrer",
+            pip: "Webcam",
+            title: "Texte sur le film",
+            crop_hint: "Glissez pour recadrer.",
+            save: "Enregistrer",
+            duration: "Durée",
+            start_minus: "Début −",
+            start_plus: "Début +",
+            end_minus: "Fin −",
+            end_plus: "Fin +",
             pause: "Pause",
             resume: "Reprendre",
             stop: "Stop",
