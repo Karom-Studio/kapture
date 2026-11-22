@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Linux libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvulkan1 mesa-vulkan-drivers libxkbcommon-dev libwayland-dev \
+            libx11-dev libxcb1-dev libxcb-randr0-dev libxcb-shm0-dev libdbus-1-dev pkg-config \
+            libclang-dev libpipewire-0.3-dev
+      - name: Test
+        run: cargo test -- --test-threads=8

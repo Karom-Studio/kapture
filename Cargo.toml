@@ -1,0 +1,45 @@
+[package]
+name = "lueur"
+version = "0.1.0"
+description = "Captures d'écran et films, en local, sans navigateur."
+authors = ["Romain"]
+license = "Apache-2.0"
+edition = "2024"
+
+[[bin]]
+name = "lueur"
+path = "src/main.rs"
+
+[dependencies]
+gpui = { version = "0.2.2", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+xcap = { version = "0.9", features = ["image"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+arboard = "3"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+uuid = { version = "1", features = ["v4"] }
+open = "5"
+directories = "6"
+base64 = "0.22"
+global-hotkey = "0.8"
+tray-icon = "0.21"
+rfd = "0.15"
+smallvec = "1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gpui = { version = "0.2.2", default-features = false, features = ["x11", "wayland"] }
+gtk = "0.18"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+gpui = { version = "0.2.2", default-features = false, features = ["font-kit"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+gpui = { version = "0.2.2", default-features = false, features = ["windows-manifest"] }
+
+# xattr 0.2.3 (via gpui_http_client) still names libc::ENOATTR, removed from newer libc.
+[patch.crates-io]
+xattr = { path = "vendor/xattr" }
