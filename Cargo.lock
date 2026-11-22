@@ -3423,6 +3423,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "kapture"
+version = "0.1.0"
+dependencies = [
+ "arboard",
+ "base64",
+ "chrono",
+ "directories",
+ "global-hotkey",
+ "gpui",
+ "gtk",
+ "image",
+ "libc",
+ "open",
+ "rfd",
+ "serde",
+ "serde_json",
+ "smallvec",
+ "tray-icon",
+ "uuid",
+ "xcap",
+]
+
+[[package]]
 name = "keyboard-types"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4386,29 +4409,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e5a6c098c7a3b6547378093f5cc30bc54fd361ce711e05293a5cc589562739b"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "oeilleton"
-version = "0.1.0"
-dependencies = [
- "arboard",
- "base64",
- "chrono",
- "directories",
- "global-hotkey",
- "gpui",
- "gtk",
- "image",
- "libc",
- "open",
- "rfd",
- "serde",
- "serde_json",
- "smallvec",
- "tray-icon",
- "uuid",
- "xcap",
 ]
 
 [[package]]

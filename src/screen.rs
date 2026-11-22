@@ -137,11 +137,7 @@ fn useful(info: &WindowInfo) -> bool {
     }
     let lower = title.to_lowercase();
     let app = info.app_name.to_lowercase();
-    if lower == "œilleton"
-        || lower == "oeilleton"
-        || app.contains("œilleton")
-        || app.contains("oeilleton")
-    {
+    if lower.contains("kapture") || app.contains("kapture") {
         return false;
     }
     if lower == "desktop" || lower.contains("program manager") || lower == "plasma" {

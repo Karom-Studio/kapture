@@ -1,6 +1,18 @@
-# Œilleton
+# Kapture Desktop
 
-Œilleton, le viseur par lequel on cadre, capture l'écran et enregistre un film, en local, sur Windows, macOS et Linux. L'interface est native, dessinée par [GPUI](https://gpui.rs), le cadre GPU de Zed — celui que Cap a choisi en quittant le navigateur. Il n'y a pas de webview.
+Kapture — An open-source project by Karom Studio.
+
+Kapture Desktop capture l'écran et enregistre un film, en local, sur Windows, macOS et Linux. L'interface est native, dessinée par [GPUI](https://gpui.rs), le cadre GPU de Zed. Il n'y a pas de webview.
+
+| | |
+| --- | --- |
+| Organisation | Karom Studio |
+| Dépôt | [github.com/Karom-Studio/kapture](https://github.com/Karom-Studio/kapture) |
+| Application | Kapture Desktop |
+| Documentation | [kapture.karom.studio](https://kapture.karom.studio) |
+| Paquet npm éventuel | `@karom-studio/kapture` |
+
+Le binaire s'appelle `kapture`. Les fichiers portent le préfixe `Kapture_`. Le paquet npm n'est pas publié : l'application est un programme Rust, sans dépendance JavaScript.
 
 Le moteur est séparé de l'interface : `xcap` parle aux API natives (X11, portail Wayland, ScreenCaptureKit, Windows Graphics) et FFmpeg encode le MP4.
 
@@ -16,12 +28,13 @@ Le moteur est séparé de l'interface : `xcap` parle aux API natives (X11, porta
 
 ## Plus tard
 
+- Annotation : flèches, texte, floutage.
+- Recadrage et édition rapide.
+- Export JPEG et WebP, en plus du PNG.
+- Partage des captures.
 - Montage : couper, zoomer sur les clics.
-- Liens de partage avec un serveur que l'on héberge soi-même.
-- Commentaires.
-- Habillage de marque.
 
-Les fichiers restent des PNG et des MP4. `library.json` décrit leur source pour un futur monteur.
+Les fichiers restent sur le disque. `library.json` décrit leur source pour ces étapes.
 
 ## Lancer
 
@@ -47,7 +60,7 @@ cargo run
 cargo run
 ```
 
-La première capture macOS demande l'écran, le micro et la caméra dans Réglages Système. Le son du système y exige une boucle (BlackHole, Loopback). Sous Windows, « Stereo Mix » sert de son système. En Wayland pur, les photos passent par le portail ; le film continu n'est pas encore relié à FFmpeg et Œilleton le dit. Une session X11 ou XWayland filme.
+La première capture macOS demande l'écran, le micro et la caméra dans Réglages Système. Le son du système y exige une boucle (BlackHole, Loopback). Sous Windows, « Stereo Mix » sert de son système. En Wayland pur, les photos passent par le portail ; le film continu n'est pas encore relié à FFmpeg et Kapture Desktop le dit. Une session X11 ou XWayland filme.
 
 ## Raccourcis
 
@@ -72,7 +85,7 @@ Géométrie, réglages, arguments FFmpeg des trois OS, bibliothèque et parseurs
 ## Limites
 
 - Vérifié sur Linux X11 : fenêtre GPUI, photo PNG 1920×1200, film MP4. Windows et macOS sont compilés par l'intégration continue, pas exécutés ici.
-- Un film plein écran inclut la fenêtre d'Œilleton.
+- Un film plein écran inclut la fenêtre de Kapture Desktop.
 - Une fenêtre est filmée selon le rectangle qu'elle occupe au démarrage.
 - Sans PulseAudio, micro ni caméra, le film est silencieux et sans bulle.
 - GPUI a besoin de Vulkan. `lavapipe` sert de repli logiciel.

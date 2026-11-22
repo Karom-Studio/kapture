@@ -1,13 +1,13 @@
 [package]
-name = "oeilleton"
+name = "kapture"
 version = "0.1.0"
-description = "Captures d'écran et films, en local, sans navigateur."
-authors = ["Romain"]
+description = "Kapture Desktop — an open-source project by Karom Studio."
+authors = ["Karom Studio"]
 license = "Apache-2.0"
 edition = "2024"
 
 [[bin]]
-name = "oeilleton"
+name = "kapture"
 path = "src/main.rs"
 
 [dependencies]

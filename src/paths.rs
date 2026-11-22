@@ -12,15 +12,15 @@ pub struct Paths {
 
 impl Paths {
     pub fn new() -> Self {
-        let project = directories::ProjectDirs::from("app", "Oeilleton", "oeilleton");
+        let project = directories::ProjectDirs::from("studio", "Karom Studio", "kapture");
         let config_dir = project
             .as_ref()
             .map(|p| p.config_dir().to_path_buf())
-            .unwrap_or_else(|| std::env::temp_dir().join("oeilleton"));
+            .unwrap_or_else(|| std::env::temp_dir().join("kapture"));
         let work_dir = project
             .as_ref()
             .map(|p| p.cache_dir().to_path_buf())
-            .unwrap_or_else(|| std::env::temp_dir().join("oeilleton-cache"));
+            .unwrap_or_else(|| std::env::temp_dir().join("kapture-cache"));
         Self {
             settings_file: config_dir.join("settings.json"),
             library_file: config_dir.join("library.json"),
@@ -40,11 +40,11 @@ impl Paths {
 
 pub fn default_output_dir() -> PathBuf {
     directories::UserDirs::new()
-        .and_then(|dirs| dirs.picture_dir().map(|p| p.join("Oeilleton")))
+        .and_then(|dirs| dirs.picture_dir().map(|p| p.join("Kapture")))
         .or_else(|| {
-            directories::UserDirs::new().map(|dirs| dirs.home_dir().join("Pictures").join("Oeilleton"))
+            directories::UserDirs::new().map(|dirs| dirs.home_dir().join("Pictures").join("Kapture"))
         })
-        .unwrap_or_else(|| std::env::temp_dir().join("Oeilleton"))
+        .unwrap_or_else(|| std::env::temp_dir().join("Kapture"))
 }
 
 #[cfg(test)]
@@ -52,11 +52,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn paths_point_at_oeilleton_folders() {
+    fn paths_point_at_kapture_folders() {
         let paths = Paths::new();
-        assert!(paths.config_dir.ends_with("oeilleton") || paths.config_dir.ends_with("Oeilleton"));
+        assert!(paths.config_dir.ends_with("kapture") || paths.config_dir.ends_with("Kapture"));
         assert!(paths.settings_file.ends_with("settings.json"));
         assert!(paths.library_file.ends_with("library.json"));
-        assert!(default_output_dir().ends_with("Oeilleton"));
+        assert!(default_output_dir().ends_with("Kapture"));
     }
 }

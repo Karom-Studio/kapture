@@ -26,9 +26,9 @@ pub fn text(locale: &str, code: &str) -> String {
         },
         "CAPTURE_FAILED" => if en { "The capture failed." } else { "La capture a échoué." },
         "PERMISSION" => if en {
-            "Screen access was denied. Allow Œilleton in the system privacy settings, then try again."
+            "Screen access was denied. Allow Kapture Desktop in the system privacy settings, then try again."
         } else {
-            "L'accès à l'écran a été refusé. Autorisez Œilleton dans les réglages de confidentialité du système, puis réessayez."
+            "L'accès à l'écran a été refusé. Autorisez Kapture Desktop dans les réglages de confidentialité du système, puis réessayez."
         },
         "HOTKEY_INVALID" => if en { "That shortcut is not valid." } else { "Ce raccourci n'est pas valide." },
         "HOTKEY_DUPLICATE" => if en { "Each shortcut must be different." } else { "Chaque raccourci doit être différent." },

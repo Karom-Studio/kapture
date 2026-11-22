@@ -49,14 +49,14 @@ pub fn run() {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 ..Default::default()
             },
-            move |_, cx| cx.new(|cx| Oeilleton::new(rx, tx.clone(), cx)),
+            move |_, cx| cx.new(|cx| Kapture::new(rx, tx.clone(), cx)),
         )
-        .expect("fenêtre Œilleton");
+        .expect("fenêtre Kapture Desktop");
         cx.activate(true);
     });
 }
 
-struct Oeilleton {
+struct Kapture {
     engine: Arc<Engine>,
     tx: Sender<Job>,
     rx: Receiver<Job>,
@@ -77,7 +77,7 @@ struct Oeilleton {
     started: bool,
 }
 
-impl Oeilleton {
+impl Kapture {
     fn new(rx: Receiver<Job>, tx: Sender<Job>, cx: &mut Context<Self>) -> Self {
         let engine = Arc::new(Engine::new());
         let boot = engine.bootstrap();
@@ -433,6 +433,12 @@ impl Oeilleton {
                 div()
                     .text_size(px(12.))
                     .text_color(rgb(0xb7ab9c))
+                    .child(SharedString::from(t.byline)),
+            )
+            .child(
+                div()
+                    .text_size(px(12.))
+                    .text_color(rgb(0x8d8274))
                     .child(SharedString::from(format!("v{}", self.boot.version))),
             )
     }
@@ -728,7 +734,7 @@ impl Oeilleton {
         label: &'static str,
         options: &[(&'static str, bool)],
         cx: &mut Context<Self>,
-        apply: fn(&mut Oeilleton, usize),
+        apply: fn(&mut Kapture, usize),
     ) -> impl IntoElement {
         div()
             .flex()
@@ -829,7 +835,7 @@ impl Oeilleton {
     }
 }
 
-impl Render for Oeilleton {
+impl Render for Kapture {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         match self.mode {
             Mode::Preparing => div()
@@ -851,8 +857,8 @@ impl Render for Oeilleton {
 fn nav_button(
     label: &'static str,
     active: bool,
-    cx: &mut Context<Oeilleton>,
-    f: fn(&mut Oeilleton, &mut Context<Oeilleton>),
+    cx: &mut Context<Kapture>,
+    f: fn(&mut Kapture, &mut Context<Kapture>),
 ) -> gpui::Div {
     let bg = if active { rgb(0x2a241c) } else { rgb(0x181511) };
     div()
@@ -882,8 +888,8 @@ fn small_button(label: &'static str) -> gpui::Div {
 fn toggle_row(
     label: &'static str,
     on: bool,
-    cx: &mut Context<Oeilleton>,
-    flip: fn(&mut Oeilleton),
+    cx: &mut Context<Kapture>,
+    flip: fn(&mut Kapture),
 ) -> impl IntoElement {
     div()
         .flex()
@@ -934,6 +940,7 @@ fn shortcut_line(hotkeys: &Hotkeys) -> String {
 struct Texts {
     name: &'static str,
     kicker: &'static str,
+    byline: &'static str,
     home_title: &'static str,
     home: &'static str,
     library: &'static str,
@@ -998,8 +1005,9 @@ struct Texts {
 fn texts(locale: &str) -> Texts {
     if locale == "en" {
         Texts {
-            name: "Œilleton",
-            kicker: "Local capture",
+            name: "Kapture",
+            kicker: "Kapture Desktop",
+            byline: "An open-source project by Karom Studio.",
             home_title: "What do you want to keep?",
             home: "Home",
             library: "Library",
@@ -1012,7 +1020,7 @@ fn texts(locale: &str) -> Texts {
             region_body: "Draw the frame yourself.",
             photo: "Still",
             film: "Film",
-            devices: "What Œilleton can see and hear",
+            devices: "What Kapture can see and hear",
             screen_dev: "Screen",
             mic_dev: "Microphone",
             system_dev: "System audio",
@@ -1050,7 +1058,7 @@ fn texts(locale: &str) -> Texts {
             bottom_left: "BL",
             bottom_right: "BR",
             later: "Later",
-            later_body: "Trim, click-zoom, share links and comments are next. Files stay on disk.",
+            later_body: "Arrows, text, blur, a quick crop, JPEG, WebP and sharing come next. Files stay on disk.",
             lang: "English / Français",
             preparing: "One moment…",
             drag_hint: "Drag to frame the area.",
@@ -1062,8 +1070,9 @@ fn texts(locale: &str) -> Texts {
         }
     } else {
         Texts {
-            name: "Œilleton",
-            kicker: "Capture locale",
+            name: "Kapture",
+            kicker: "Kapture Desktop",
+            byline: "Un projet open source de Karom Studio.",
             home_title: "Que voulez-vous garder ?",
             home: "Accueil",
             library: "Bibliothèque",
@@ -1076,7 +1085,7 @@ fn texts(locale: &str) -> Texts {
             region_body: "Tracez le cadre à la main.",
             photo: "Photo",
             film: "Film",
-            devices: "Ce qu'Œilleton peut voir et entendre",
+            devices: "Ce que Kapture peut voir et entendre",
             screen_dev: "Écran",
             mic_dev: "Micro",
             system_dev: "Son du système",
@@ -1114,7 +1123,7 @@ fn texts(locale: &str) -> Texts {
             bottom_left: "BG",
             bottom_right: "BD",
             later: "Plus tard",
-            later_body: "Le montage, le zoom sur les clics, les liens et les commentaires viendront ensuite. Les fichiers restent sur le disque.",
+            later_body: "Flèches, texte, flou, recadrage, JPEG, WebP et partage viendront ensuite. Les fichiers restent sur le disque.",
             lang: "Français / English",
             preparing: "Un instant…",
             drag_hint: "Glissez pour encadrer la zone.",
@@ -1136,7 +1145,7 @@ fn install_tray(tx: Sender<Job>) {
     let _ = menu.append(&MenuItem::with_id("record", "Enregistrer l'écran", true, None));
     let _ = menu.append(&MenuItem::with_id("quit", "Quitter", true, None));
     let icon = tray_icon_image();
-    if let Ok(tray) = TrayIconBuilder::new().with_menu(Box::new(menu)).with_tooltip("Œilleton").with_icon(icon).build() {
+    if let Ok(tray) = TrayIconBuilder::new().with_menu(Box::new(menu)).with_tooltip("Kapture Desktop").with_icon(icon).build() {
         Box::leak(Box::new((tray, tx)));
     }
     let _ = MenuEvent::receiver();
@@ -1153,7 +1162,7 @@ fn tray_loop(tx: Sender<Job>) {
     let icon = tray_icon_image();
     let _tray = TrayIconBuilder::new()
         .with_menu(Box::new(menu))
-        .with_tooltip("Œilleton")
+        .with_tooltip("Kapture Desktop")
         .with_icon(icon)
         .build();
         loop {
